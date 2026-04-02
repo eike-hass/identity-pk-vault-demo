@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+web/
+node/
+pkg/
+
+# Playwright
+test-results/
+playwright-report/
+
+# Environment (contains secrets — copy from .env.local.example)
+.env.*
+!.env.*.example
+
+# OS
+.DS_Store
