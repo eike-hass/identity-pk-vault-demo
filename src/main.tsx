@@ -62,4 +62,8 @@ init(wasmUrl).then(() => {
       </QueryClientProvider>
     </React.StrictMode>,
   );
+}).catch((err) => {
+  document.getElementById("root")!.innerHTML =
+    `<div style="font-family:sans-serif;padding:2rem;color:#f87171">` +
+    `<strong>Failed to initialise WASM:</strong><br><pre>${err}</pre></div>`;
 });
