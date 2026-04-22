@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { IotaDID } from "@iota/identity-wasm/web";
-import type { IotaDocument } from "@iota/identity-wasm/web";
+import type { IotaDocument, Storage } from "@iota/identity-wasm/web";
 import { useIdentityClient } from "../hooks/useIdentityClient";
 import { UpdateIdentity } from "./UpdateIdentity";
 import { CopyButton } from "./CopyButton";
@@ -9,7 +9,8 @@ import { retryAsync } from "../lib/retryAsync";
 
 interface Props {
   did: string;
-  onClear: () => void;
+  storage: Storage;
+  onClear: () => void;   // "Forget" — removes from local IDB only
 }
 
 // ── Icons ─────────────────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ function Spinner() {
 }
 
 // ── IdentityDashboard ─────────────────────────────────────────────────────────
-export function IdentityDashboard({ did, onClear }: Props) {
+export function IdentityDashboard({ did, storage, onClear }: Props) {
   const { readOnlyClient } = useIdentityClient();
   const [document, setDocument] = useState<IotaDocument | null>(null);
   const [loading, setLoading] = useState(false);
@@ -254,7 +255,13 @@ export function IdentityDashboard({ did, onClear }: Props) {
       {/* Inline update panel */}
       {showUpdate && document && (
         <div className="slide-in">
-          <UpdateIdentity did={did} document={document} onUpdated={handleUpdated} />
+          <UpdateIdentity
+            did={did}
+            document={document}
+            storage={storage}
+            onUpdated={handleUpdated}
+            onDeleted={onClear}
+          />
         </div>
       )}
     </div>

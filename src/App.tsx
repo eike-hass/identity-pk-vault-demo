@@ -172,6 +172,7 @@ export default function App() {
                   <IdentityDashboard
                     key={selectedDid}
                     did={selectedDid}
+                    storage={storage}
                     onClear={() => handleForget(selectedDid)}
                   />
                 )}
