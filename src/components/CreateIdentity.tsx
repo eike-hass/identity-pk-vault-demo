@@ -15,24 +15,40 @@ interface Props {
   storage: Storage;
 }
 
+function Spinner() {
+  return <span className="spinner" style={{ width: 14, height: 14 }} />;
+}
+
+const WHAT_WILL_BE_CREATED = [
+  "A new DID anchored to the IOTA ledger",
+  "An Ed25519 verification method (#key-1)",
+  "An on-chain Identity object owned by your wallet",
+];
+
 export function CreateIdentity({ onCreated, storage }: Props) {
   const { readOnlyClient, createIdentityClient, isReady } = useIdentityClient();
   const sdkClient = useIotaClient();
   const { network } = useIotaClientContext();
   const [creating, setCreating] = useState(false);
+  const [step, setStep] = useState<"signing" | "publishing" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const stepLabel = step === "signing"
+    ? "Waiting for wallet signature…"
+    : step === "publishing"
+    ? "Publishing to IOTA ledger…"
+    : "";
 
   async function handleCreate() {
     if (!readOnlyClient) return;
     setCreating(true);
+    setStep("signing");
     setError(null);
 
     try {
-      // ── 1. Create the signing-capable client ──────────────────────────────
       const identityClient = await createIdentityClient();
       const network = identityClient.network();
 
-      // ── 2. Build an unpublished DID document ──────────────────────────────
       const unpublished = new IotaDocument(network);
       await unpublished.generateMethod(
         storage,
@@ -42,13 +58,8 @@ export function CreateIdentity({ onCreated, storage }: Props) {
         MethodScope.VerificationMethod(),
       );
 
-      // ── 3. Build and sign the transaction ─────────────────────────────────
-      // Pattern from examples/src/1_advanced/11_advanced_transactions.ts:
-      //   .build(identityClient) calls identityClient.signer().sign() internally,
-      //   which triggers the wallet popup via WalletSigner, then returns:
-      //     [txDataBcs: Uint8Array, signatures: string[], tx: Transaction<CreateIdentity>]
-      // We avoid buildAndExecute because its result-processing path tries to
-      // deserialise a WasmControllerCap and crashes in this beta version of the library.
+      setStep("publishing");
+
       const [txDataBcs, signatures] = await (
         identityClient
           .createIdentity(unpublished)
@@ -58,7 +69,6 @@ export function CreateIdentity({ onCreated, storage }: Props) {
         }
       ).build(identityClient);
 
-      // ── 4. Execute and capture object changes ──────────────────────────────
       const result = await (sdkClient as unknown as {
         executeTransactionBlock: (args: {
           transactionBlock: Uint8Array;
@@ -71,7 +81,6 @@ export function CreateIdentity({ onCreated, storage }: Props) {
         options: { showObjectChanges: true },
       });
 
-      // ── 5. Find the newly created Identity object ──────────────────────────
       const identityChange = (result.objectChanges ?? []).find(
         (c) => c.type === "created" && c.objectType?.includes("::identity::Identity"),
       );
@@ -79,92 +88,91 @@ export function CreateIdentity({ onCreated, storage }: Props) {
         throw new Error("Identity object not found in transaction output.");
       }
 
-      // ── 6. Derive the DID from the on-chain object ID ─────────────────────
-      // Avoids tx.apply() which also crashes on WasmControllerCap in this beta.
       const did = IotaDID.fromObjectId(identityChange.objectId, network).toString();
       onCreated(did);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreating(false);
+      setStep(null);
     }
   }
 
+  const faucetUrl = network === "localnet"
+    ? "http://localhost:9123"
+    : `https://faucet.${network}.iota.cafe`;
+
   return (
-    <div className="card space-y-5">
+    <div className="card fade-in" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
-        <h2 className="text-lg font-semibold text-gray-100">Create a new Identity</h2>
-        <p className="mt-1 text-sm text-gray-400">
-          Publishes a DID document on the IOTA ledger. Your connected wallet pays for gas
-          and becomes the sole controller of the identity.
+        <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--text-1)", marginBottom: 6 }}>
+          Create a new identity
+        </h2>
+        <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.6 }}>
+          Publishes a DID document on the IOTA ledger. Your connected wallet pays for gas and
+          becomes the sole controller.
         </p>
       </div>
 
-      {/* What gets created */}
-      <div className="bg-gray-800/50 rounded-lg p-4 space-y-2 text-sm">
-        <p className="font-medium text-gray-300">What will be created</p>
-        <ul className="text-gray-400 space-y-1 list-disc list-inside">
-          <li>A new DID anchored to the IOTA ledger</li>
-          <li>An Ed25519 verification method (#key-1)</li>
-          <li>An on-chain Identity object owned by your wallet address</li>
-        </ul>
+      {/* What will be created */}
+      <div style={{
+        background: "rgba(255,255,255,0.03)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        borderRadius: 10,
+        padding: "12px 14px",
+      }}>
+        <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text-2)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 10 }}>
+          What will be created
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+          {WHAT_WILL_BE_CREATED.map((item, i) => (
+            <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{
+                width: 16, height: 16, borderRadius: "50%",
+                background: "rgba(14,165,233,0.15)",
+                border: "1px solid rgba(14,165,233,0.3)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0, marginTop: 1,
+              }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#38bdf8", display: "block" }} />
+              </span>
+              <span style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>{item}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {error && (
-        <div className="bg-red-950/50 border border-red-800/50 rounded-lg p-3 text-sm text-red-300">
-          {error}
+      {error && <div className="banner-error">{error}</div>}
+
+      {/* Progress indicator */}
+      {creating && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "10px 14px",
+          background: "rgba(14,165,233,0.06)",
+          border: "1px solid rgba(14,165,233,0.15)",
+          borderRadius: 10,
+        }}>
+          <Spinner />
+          <span style={{ fontSize: 13, color: "#7dd3fc" }}>{stepLabel}</span>
         </div>
       )}
 
       <button
+        className="btn btn-primary"
         onClick={handleCreate}
         disabled={creating || !isReady}
-        className="btn-primary w-full py-2.5"
+        style={{ padding: "12px 20px", fontSize: 14 }}
       >
-        {creating ? (
-          <span className="flex items-center justify-center gap-2">
-            <Spinner /> Publishing identity…
-          </span>
-        ) : (
-          "Create Identity"
-        )}
+        {creating ? <><Spinner /> Publishing…</> : "Create Identity"}
       </button>
 
-      <p className="text-xs text-gray-500 text-center">
-        Requires a small amount of IOTA for gas. Get test tokens from the{" "}
-        <a
-          href={
-            network === "localnet"
-              ? "http://localhost:9123"
-              : `https://faucet.${network}.iota.cafe`
-          }
-          target="_blank"
-          rel="noreferrer"
-          className="text-iota-400 hover:underline"
-        >
-          {network} faucet
+      <p style={{ fontSize: 12, color: "var(--text-3)", textAlign: "center" }}>
+        Requires a small amount of IOTA for gas.{" "}
+        <a href={faucetUrl} target="_blank" rel="noreferrer" style={{ color: "#38bdf8", textDecoration: "none" }}>
+          Get test tokens ↗
         </a>
-        .
       </p>
     </div>
-  );
-}
-
-function Spinner() {
-  return (
-    <svg
-      className="animate-spin h-4 w-4"
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-    >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path
-        className="opacity-75"
-        fill="currentColor"
-        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-      />
-    </svg>
   );
 }

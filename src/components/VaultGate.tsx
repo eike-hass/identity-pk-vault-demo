@@ -1,90 +1,134 @@
 /**
  * VaultGate — guards the main app content behind Passkey vault authentication.
- *
- * Renders one of four states based on `VaultStatus`:
- *  - "checking"     → loading spinner
- *  - "unsupported"  → amber notice; children are rendered normally (JwkMemStore fallback)
- *  - "unregistered" → "Create key vault" panel
- *  - "locked"       → "Unlock vault" panel
- *  - "unlocked"     → children rendered directly
- *  - "error"        → error panel with retry option
  */
 
 import { useRef, useState } from "react";
 import type { VaultStatus } from "../hooks/usePasskeyVault";
 
-// ── Fingerprint SVG (reused from Header / App) ────────────────────────────────
-
-function FingerprintIcon({ className }: { className?: string }) {
+// ── Refined fingerprint icon (4-arc design) ───────────────────────────────────
+function FingerprintIcon({ size }: { size: number }) {
   return (
-    <svg className={className} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <circle cx="10" cy="13.5" r="1.4" fill="white" />
-      <path
-        d="M7.8 13.5C7.8 10.8 8.7 9 10 9C11.3 9 12.2 10.8 12.2 13.5"
-        stroke="white" strokeWidth="1.4" strokeLinecap="round"
-      />
-      <path
-        d="M5.5 13.5C5.5 8.5 7.4 5.5 10 5.5C12.6 5.5 14.5 8.5 14.5 13.5C14.5 15.5 13.8 17 12.5 18"
-        stroke="white" strokeWidth="1.4" strokeLinecap="round"
-      />
-      <path
-        d="M3 14C3 6.5 6.1 2.5 10 2.5C13.9 2.5 17 6.5 17 14C17 16.5 16 18.5 14.5 19.5"
-        stroke="white" strokeWidth="1.4" strokeLinecap="round"
-      />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {/* Core dot */}
+      <circle cx="12" cy="14.5" r="1.6" fill="white" />
+      {/* Arc 1 — tightest */}
+      <path d="M9.2 14.5C9.2 11.6 10.4 10 12 10C13.6 10 14.8 11.6 14.8 14.5"
+        stroke="white" strokeWidth="1.45" strokeLinecap="round" />
+      {/* Arc 2 */}
+      <path d="M6.8 14.5C6.8 9.9 9.1 7.2 12 7.2C14.9 7.2 17.2 9.9 17.2 14.5C17.2 17 16.2 19 14.8 20.2"
+        stroke="white" strokeWidth="1.35" strokeLinecap="round" />
+      {/* Arc 3 */}
+      <path d="M4.4 15.2C4.4 8.5 7.6 4.4 12 4.4C16.4 4.4 19.6 8.5 19.6 15.2C19.6 18.8 18.2 21.5 16.2 23"
+        stroke="white" strokeWidth="1.25" strokeLinecap="round" />
+      {/* Arc 4 — outermost, faded */}
+      <path d="M2 16C2 7.2 6.3 1.8 12 1.8C17.7 1.8 22 7.2 22 16"
+        stroke="white" strokeWidth="1.15" strokeLinecap="round" strokeOpacity="0.6" />
     </svg>
   );
 }
 
-// ── Shared vault panel layout ─────────────────────────────────────────────────
+// ── Biometric mark (idle + busy states) ───────────────────────────────────────
+function BiometricMark({ size = 72, busy = false }: { size?: number; busy?: boolean }) {
+  const br = Math.round(size * 0.28);
+  const iconSize = Math.round(size * 0.58);
 
+  return (
+    <div style={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      {/* Pulse rings when busy */}
+      {busy && ([0, 0.55, 1.1] as const).map((delay, i) => (
+        <div key={i} style={{
+          position: "absolute",
+          inset: -(size * 0.14 + i * size * 0.1),
+          borderRadius: br + (size * 0.14 + i * size * 0.1),
+          border: `1.5px solid rgba(14,165,233,${0.55 - i * 0.15})`,
+          animation: `bioPulse 1.6s ease-out ${delay}s infinite`,
+          pointerEvents: "none",
+        }} />
+      ))}
+
+      <div style={{
+        width: size, height: size, borderRadius: br,
+        background: busy
+          ? "linear-gradient(145deg, #0c4a7c 0%, #0ea5e9 55%, #38bdf8 100%)"
+          : "linear-gradient(145deg, #0c3d6a 0%, #0369a1 50%, #0ea5e9 100%)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: busy
+          ? "0 8px 32px rgba(14,165,233,0.6), inset 0 1px 0 rgba(255,255,255,0.22)"
+          : "0 8px 28px rgba(14,165,233,0.3), inset 0 1px 0 rgba(255,255,255,0.15)",
+        transition: "background 0.35s, box-shadow 0.35s",
+        position: "relative", overflow: "hidden",
+      }}>
+        {/* Sweep line */}
+        {busy && (
+          <div style={{
+            position: "absolute", left: 0, right: 0, height: 2, top: "50%",
+            background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)",
+            animation: "scanSweep 1.4s ease-in-out infinite",
+            pointerEvents: "none",
+          }} />
+        )}
+        <FingerprintIcon size={iconSize} />
+      </div>
+    </div>
+  );
+}
+
+// ── Spinner ────────────────────────────────────────────────────────────────────
+function Spinner() {
+  return <span className="spinner" style={{ width: 14, height: 14 }} />;
+}
+
+// ── Shared vault panel layout ──────────────────────────────────────────────────
 function VaultPanel({
-  title,
-  description,
-  action,
-  actionLabel,
-  busy,
-  error,
+  title, description, primaryLabel, onPrimary, primaryBusy,
+  secondaryLabel, onSecondary, error,
 }: {
   title: string;
   description: string;
-  action: () => void;
-  actionLabel: string;
-  busy: boolean;
+  primaryLabel: string;
+  onPrimary: () => void;
+  primaryBusy: boolean;
+  secondaryLabel?: string;
+  onSecondary?: () => void;
   error: string | null;
 }) {
   return (
-    <div className="card text-center space-y-6 py-10 max-w-md mx-auto">
-      <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-iota-500 to-iota-700 flex items-center justify-center select-none shadow-xl shadow-iota-900/60">
-        <FingerprintIcon className="w-10 h-10" />
+    <div className="card fade-in" style={{ maxWidth: 420, margin: "0 auto", textAlign: "center" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24, padding: "8px 0 4px" }}>
+        <BiometricMark busy={primaryBusy} />
+        <div>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: "var(--text-1)", marginBottom: 8 }}>{title}</h2>
+          <p style={{ fontSize: 14, color: "var(--text-2)", lineHeight: 1.6, maxWidth: 300, margin: "0 auto" }}>
+            {description}
+          </p>
+        </div>
+        {error && <div className="banner-error">{error}</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%", maxWidth: 280 }}>
+          <button
+            className="btn btn-primary"
+            onClick={onPrimary}
+            disabled={primaryBusy}
+            style={{ width: "100%", padding: "11px 20px" }}
+          >
+            {primaryBusy ? <><Spinner /> Waiting for biometric…</> : primaryLabel}
+          </button>
+          {secondaryLabel && (
+            <button
+              className="btn btn-secondary"
+              onClick={onSecondary}
+              disabled={primaryBusy}
+              style={{ width: "100%", padding: "10px 20px" }}
+            >
+              {secondaryLabel}
+            </button>
+          )}
+        </div>
       </div>
-
-      <div>
-        <h2 className="text-xl font-bold text-gray-100">{title}</h2>
-        <p className="mt-2 text-sm text-gray-400 max-w-xs mx-auto">{description}</p>
-      </div>
-
-      {error && (
-        <p className="text-sm text-red-400 bg-red-950/40 border border-red-800/50 rounded-lg px-4 py-2">
-          {error}
-        </p>
-      )}
-
-      <button className="btn-primary w-full max-w-xs mx-auto" onClick={action} disabled={busy}>
-        {busy ? (
-          <span className="flex items-center justify-center gap-2">
-            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            Waiting for biometric…
-          </span>
-        ) : (
-          actionLabel
-        )}
-      </button>
     </div>
   );
 }
 
 // ── VaultGate ─────────────────────────────────────────────────────────────────
-
 interface VaultGateProps {
   status: VaultStatus;
   onRegister: () => Promise<void>;
@@ -102,13 +146,9 @@ export function VaultGate({ status, onRegister, onUnlock, onRegisterAndRestore, 
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function handleAction(fn: () => Promise<void>) {
+  async function wrap(fn: () => Promise<void>) {
     setBusy(true);
-    try {
-      await fn();
-    } finally {
-      setBusy(false);
-    }
+    try { await fn(); } finally { setBusy(false); }
   }
 
   async function handleRegisterAndRestore() {
@@ -125,132 +165,143 @@ export function VaultGate({ status, onRegister, onUnlock, onRegisterAndRestore, 
     }
   }
 
+  // ── Checking ──
   if (status === "checking") {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <span className="text-sm text-gray-500 animate-pulse">Loading key vault…</span>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 280 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+          <BiometricMark size={56} />
+          <p className="pulse" style={{ fontSize: 13, color: "var(--text-2)" }}>Checking key vault…</p>
+        </div>
       </div>
     );
   }
 
+  // ── Error ──
   if (status === "error") {
     return (
-      <div className="card max-w-md mx-auto text-center py-8 space-y-3">
-        <p className="text-sm font-medium text-red-400">Key vault error</p>
-        <p className="text-sm text-gray-400">{error}</p>
-        <button className="btn-secondary text-sm" onClick={() => window.location.reload()}>
-          Reload page
-        </button>
+      <div className="card fade-in" style={{ maxWidth: 420, margin: "0 auto", textAlign: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "8px 0" }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: 14,
+            background: "rgba(248,113,113,0.12)",
+            border: "1px solid rgba(248,113,113,0.25)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <span style={{ fontSize: 20 }}>⚠</span>
+          </div>
+          <div>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: "#fca5a5", marginBottom: 6 }}>Key Vault Error</h2>
+            <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.6 }}>{error}</p>
+          </div>
+          <button className="btn btn-secondary" onClick={() => window.location.reload()}>Reload page</button>
+        </div>
       </div>
     );
   }
 
+  // ── Unregistered ──
   if (status === "unregistered") {
+    if (showRestore) {
+      return (
+        <div className="card fade-in" style={{ maxWidth: 420, margin: "0 auto" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <BiometricMark size={48} busy={busy} />
+              <div>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: "var(--text-1)" }}>Restore from backup</h2>
+                <p style={{ fontSize: 13, color: "var(--text-2)", marginTop: 2 }}>
+                  Register a new passkey and restore your keys
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label className="label">Backup file</label>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".json"
+                  className="file-input"
+                  onChange={(e) => setRestoreFile(e.target.files?.[0] ?? null)}
+                  disabled={busy}
+                />
+              </div>
+              <div>
+                <label className="label">Backup password</label>
+                <input
+                  type="password"
+                  className="input"
+                  placeholder="Password used when exporting"
+                  value={restorePassword}
+                  onChange={(e) => setRestorePassword(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+            </div>
+            {restoreError && <div className="banner-error">{restoreError}</div>}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <button
+                className="btn btn-primary"
+                onClick={handleRegisterAndRestore}
+                disabled={busy || !restoreFile || !restorePassword}
+                style={{ padding: "11px 20px" }}
+              >
+                {busy ? <><Spinner /> Waiting for biometric…</> : "Register passkey & restore"}
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() => { setShowRestore(false); setRestoreError(null); }}
+                disabled={busy}
+              >
+                ← Back
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="card text-center space-y-6 py-10 max-w-md mx-auto">
-        <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-iota-500 to-iota-700 flex items-center justify-center select-none shadow-xl shadow-iota-900/60">
-          <FingerprintIcon className="w-10 h-10" />
-        </div>
-
-        <div>
-          <h2 className="text-xl font-bold text-gray-100">Secure your identity keys</h2>
-          <p className="mt-2 text-sm text-gray-400 max-w-xs mx-auto">
-            {error
-              ? "The stored vault credential is not accessible from this browser. Register a new vault for this browser — note that keys created in another browser cannot be shared."
-              : "Your DID signing keys are stored in an encrypted vault. Use your device biometrics (Face ID, fingerprint, or PIN) to create and unlock it."}
-          </p>
-        </div>
-
-        {!showRestore ? (
-          <div className="space-y-3 max-w-xs mx-auto w-full">
-            <button className="btn-primary w-full" onClick={() => handleAction(onRegister)} disabled={busy}>
-              {busy ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Waiting for biometric…
-                </span>
-              ) : (error ? "Register this browser" : "Create key vault")}
-            </button>
-            <button className="btn-secondary w-full text-sm" onClick={() => setShowRestore(true)} disabled={busy}>
-              Restore from backup
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-3 max-w-xs mx-auto w-full text-left">
-            <div>
-              <label className="label">Backup file</label>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".json"
-                className="input w-full text-sm file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:bg-gray-700 file:text-gray-200 hover:file:bg-gray-600 cursor-pointer"
-                onChange={(e) => setRestoreFile(e.target.files?.[0] ?? null)}
-                disabled={busy}
-              />
-            </div>
-            <div>
-              <label className="label">Backup password</label>
-              <input
-                type="password"
-                className="input w-full"
-                placeholder="Password used when exporting"
-                value={restorePassword}
-                onChange={(e) => setRestorePassword(e.target.value)}
-                disabled={busy}
-              />
-            </div>
-
-            {restoreError && (
-              <p className="text-sm text-red-400 bg-red-950/40 border border-red-800/50 rounded-lg px-3 py-2">
-                {restoreError}
-              </p>
-            )}
-
-            <button
-              className="btn-primary w-full"
-              onClick={handleRegisterAndRestore}
-              disabled={busy || !restoreFile || !restorePassword}
-            >
-              {busy ? (
-                <span className="flex items-center justify-center gap-2">
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Waiting for biometric…
-                </span>
-              ) : "Register passkey & restore"}
-            </button>
-            <button className="btn-secondary w-full text-sm" onClick={() => { setShowRestore(false); setRestoreError(null); }} disabled={busy}>
-              ← Back
-            </button>
-          </div>
-        )}
-      </div>
+      <VaultPanel
+        title="Secure your identity keys"
+        description={error
+          ? "The stored vault credential is not accessible from this browser. Register a new vault — keys from another browser cannot be shared."
+          : "Your DID signing keys are stored in a hardware-bound encrypted vault. Use Touch ID, Windows Hello, or a device PIN to create it."}
+        primaryLabel={error ? "Register this browser" : "Create key vault"}
+        onPrimary={() => wrap(onRegister)}
+        primaryBusy={busy}
+        secondaryLabel="Restore from backup"
+        onSecondary={() => setShowRestore(true)}
+        error={null}
+      />
     );
   }
 
+  // ── Locked ──
   if (status === "locked") {
     return (
       <VaultPanel
         title="Unlock your key vault"
-        description="Authenticate with your device biometrics to unlock your encrypted identity keys."
-        action={() => handleAction(onUnlock)}
-        actionLabel="Unlock with biometrics"
-        busy={busy}
+        description="Authenticate with your device biometrics to unlock your encrypted identity keys for this session."
+        primaryLabel="Unlock with biometrics"
+        onPrimary={() => wrap(onUnlock)}
+        primaryBusy={busy}
         error={error}
       />
     );
   }
 
-  // "unsupported" — show a non-blocking notice above the normal app content.
-  // "unlocked"    — just render children.
+  // ── Unsupported or Unlocked ──
   return (
     <>
       {status === "unsupported" && (
-        <div className="bg-amber-950/50 border border-amber-800/50 rounded-xl px-4 py-3 text-sm text-amber-300 max-w-2xl mx-auto w-full px-4 mt-4 flex gap-2 items-start">
-          <span className="shrink-0 mt-0.5">⚠</span>
+        <div className="banner-warn" style={{ maxWidth: 640, margin: "0 auto", display: "flex", gap: 8, alignItems: "flex-start" }}>
+          <span style={{ flexShrink: 0 }}>⚠</span>
           <span>
             <strong>Key vault unavailable.</strong> Your browser does not support the WebAuthn PRF
-            extension. Signing keys will be stored in memory only and lost on page reload.
-            {" "}Use Chrome 116+, Edge 116+, or Safari 17.4+ for full support. Firefox 139+ works with local authenticators (Windows Hello, Touch ID) but not cross-device (phone) passkeys.
+            extension. Signing keys will be stored in memory only and lost on page reload.{" "}
+            Use Chrome 116+, Edge 116+, or Safari 17.4+ for full support.
           </span>
         </div>
       )}
@@ -258,4 +309,3 @@ export function VaultGate({ status, onRegister, onUnlock, onRegisterAndRestore, 
     </>
   );
 }
-

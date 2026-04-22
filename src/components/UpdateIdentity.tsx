@@ -9,17 +9,21 @@ interface Props {
 
 type UpdateMode = "add-service" | "deactivate";
 
+function Spinner() {
+  return <span className="spinner" style={{ width: 14, height: 14 }} />;
+}
+
 export function UpdateIdentity({ did, onUpdated }: Props) {
   const { readOnlyClient, createIdentityClient } = useIdentityClient();
   const [mode, setMode] = useState<UpdateMode>("add-service");
 
-  // Add-service form state
-  const [serviceId, setServiceId] = useState("#linked-domain");
-  const [serviceType, setServiceType] = useState("LinkedDomains");
+  const [serviceId,       setServiceId]       = useState("#linked-domain");
+  const [serviceType,     setServiceType]     = useState("LinkedDomains");
   const [serviceEndpoint, setServiceEndpoint] = useState("https://example.com");
 
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [busy,      setBusy]      = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
 
   async function handleUpdate() {
     if (!readOnlyClient) return;
@@ -30,17 +34,14 @@ export function UpdateIdentity({ did, onUpdated }: Props) {
       const identityClient = await createIdentityClient();
       const iotaDid = IotaDID.parse(did);
 
-      // getIdentity returns an Identity; toFullFledged() narrows it to OnChainIdentity.
       const identity = await identityClient.getIdentity(iotaDid.toObjectID());
       const onChainIdentity = identity.toFullFledged();
       if (!onChainIdentity) throw new Error("This DID is not a full on-chain identity.");
 
-      // A ControllerToken is required for any mutating operation.
       const controllerToken = await onChainIdentity.getControllerToken(identityClient);
       if (!controllerToken) throw new Error("Connected wallet is not a controller of this identity.");
 
       if (mode === "add-service") {
-        // Resolve the current document, add the service, then publish.
         const document = await identityClient.resolveDid(iotaDid);
         document.insertService(
           new Service({
@@ -49,12 +50,10 @@ export function UpdateIdentity({ did, onUpdated }: Props) {
             serviceEndpoint,
           }),
         );
-
         await onChainIdentity
           .updateDidDocument(document, controllerToken)
           .buildAndExecute(identityClient);
       } else {
-        // Deactivate the DID on-chain.
         await onChainIdentity
           .deactivateDid(controllerToken)
           .buildAndExecute(identityClient);
@@ -74,85 +73,105 @@ export function UpdateIdentity({ did, onUpdated }: Props) {
   }
 
   return (
-    <div className="card space-y-5">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-100">Update Identity</h2>
-        <p className="mt-1 text-sm text-gray-400 font-mono break-all text-xs">{did}</p>
+    <div className="card" style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)", marginBottom: 4 }}>Update Identity</h2>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#7dd3fc", wordBreak: "break-all", lineHeight: 1.5 }}>
+            {did}
+          </p>
+        </div>
       </div>
 
-      {/* Mode tabs */}
-      <div className="flex gap-2 border-b border-gray-800">
-        {(["add-service", "deactivate"] as UpdateMode[]).map((m) => (
+      {/* Mode tabs (underline style) */}
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--border)" }}>
+        {([["add-service", "Add Service"], ["deactivate", "Deactivate"]] as const).map(([m, label]) => (
           <button
             key={m}
-            onClick={() => setMode(m)}
-            className={`pb-2 px-1 text-sm font-medium border-b-2 transition-colors ${
-              mode === m
-                ? "border-iota-500 text-iota-400"
-                : "border-transparent text-gray-500 hover:text-gray-300"
-            }`}
+            onClick={() => { setMode(m); setConfirmed(false); }}
+            style={{
+              padding: "8px 16px",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+              background: "transparent",
+              border: "none",
+              fontFamily: "inherit",
+              borderBottom: mode === m ? "2px solid #0ea5e9" : "2px solid transparent",
+              color: mode === m ? "#38bdf8" : "var(--text-2)",
+              marginBottom: -1,
+              transition: "all 0.15s",
+            }}
           >
-            {m === "add-service" ? "Add Service" : "Deactivate"}
+            {label}
           </button>
         ))}
       </div>
 
+      {/* Add service form */}
       {mode === "add-service" && (
-        <div className="space-y-3">
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div>
-            <label className="label">Service Fragment (e.g. #linked-domain)</label>
-            <input
-              className="input"
-              value={serviceId}
-              onChange={(e) => setServiceId(e.target.value)}
-              placeholder="#linked-domain"
-            />
+            <label className="label">Service fragment (e.g. #linked-domain)</label>
+            <input className="input" value={serviceId}
+              onChange={(e) => setServiceId(e.target.value)} placeholder="#linked-domain" />
           </div>
           <div>
-            <label className="label">Service Type</label>
-            <input
-              className="input"
-              value={serviceType}
-              onChange={(e) => setServiceType(e.target.value)}
-              placeholder="LinkedDomains"
-            />
+            <label className="label">Service type</label>
+            <input className="input" value={serviceType}
+              onChange={(e) => setServiceType(e.target.value)} placeholder="LinkedDomains" />
           </div>
           <div>
-            <label className="label">Service Endpoint URL</label>
-            <input
-              className="input"
-              value={serviceEndpoint}
-              onChange={(e) => setServiceEndpoint(e.target.value)}
-              placeholder="https://example.com"
-            />
+            <label className="label">Service endpoint URL</label>
+            <input className="input" value={serviceEndpoint}
+              onChange={(e) => setServiceEndpoint(e.target.value)} placeholder="https://example.com" />
           </div>
         </div>
       )}
 
+      {/* Deactivate panel */}
       {mode === "deactivate" && (
-        <div className="bg-red-950/30 border border-red-800/30 rounded-lg p-4 text-sm text-red-300 space-y-1">
-          <p className="font-medium">⚠ This will deactivate the DID</p>
-          <p className="text-red-400/80">
-            The DID document will be marked as deactivated. The on-chain Identity object is
-            not deleted; it can be reactivated by the controller.
+        <div className="danger-notice" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: "#fca5a5" }}>This will deactivate the DID</p>
+          <p style={{ fontSize: 12, color: "#f87171", lineHeight: 1.6, opacity: 0.8 }}>
+            The DID document will be marked as deactivated on-chain. The Identity object is not
+            deleted and can be reactivated by the controller.
           </p>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "#fca5a5" }}>
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              style={{ width: 14, height: 14, accentColor: "#f87171" }}
+            />
+            I understand this action
+          </label>
         </div>
       )}
 
-      {error && (
-        <div className="bg-red-950/50 border border-red-800/50 rounded-lg p-3 text-sm text-red-300">
-          {error}
-        </div>
-      )}
+      {error && <div className="banner-error">{error}</div>}
 
-      <div className="flex gap-3">
-        <button
-          onClick={handleUpdate}
-          disabled={busy || !readOnlyClient}
-          className={mode === "deactivate" ? "btn-danger flex-1 py-2.5" : "btn-primary flex-1 py-2.5"}
-        >
-          {busy ? "Publishing…" : mode === "add-service" ? "Add Service" : "Deactivate DID"}
-        </button>
+      <div>
+        {mode === "deactivate" ? (
+          <button
+            className="btn btn-danger"
+            onClick={handleUpdate}
+            disabled={busy || !confirmed}
+            style={{ width: "100%", padding: "11px 20px" }}
+          >
+            {busy ? <><Spinner /> Publishing…</> : "Deactivate DID"}
+          </button>
+        ) : (
+          <button
+            className="btn btn-primary"
+            onClick={handleUpdate}
+            disabled={busy || !readOnlyClient}
+            style={{ width: "100%", padding: "11px 20px" }}
+          >
+            {busy ? <><Spinner /> Publishing…</> : "Add Service"}
+          </button>
+        )}
       </div>
     </div>
   );

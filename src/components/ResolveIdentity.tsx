@@ -3,21 +3,44 @@ import type { IotaDocument } from "@iota/identity-wasm/web";
 import { useIdentityClient } from "../hooks/useIdentityClient";
 import { explorerObjectUrl } from "../lib/explorerUrl";
 
+function Spinner() {
+  return <span className="spinner" style={{ width: 14, height: 14 }} />;
+}
+
+function LinkIcon() {
+  return (
+    <svg width={12} height={12} viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M5 3H2.5C1.95 3 1.5 3.45 1.5 4V9.5C1.5 10.05 1.95 10.5 2.5 10.5H8C8.55 10.5 9 10.05 9 9.5V7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M7 1.5H10.5M10.5 1.5V5M10.5 1.5L5.5 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ dir = "down" }: { dir?: "down" | "up" }) {
+  return (
+    <svg width={12} height={12} viewBox="0 0 12 12" fill="none" aria-hidden="true"
+      style={{ transform: dir === "up" ? "rotate(180deg)" : undefined }}>
+      <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function ResolveIdentity() {
   const { readOnlyClient, isReady } = useIdentityClient();
   const [input, setInput] = useState("");
   const [resolving, setResolving] = useState(false);
   const [document, setDocument] = useState<IotaDocument | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showRaw, setShowRaw] = useState(false);
 
   async function handleResolve() {
     if (!readOnlyClient || !input.trim()) return;
     setResolving(true);
     setError(null);
     setDocument(null);
+    setShowRaw(false);
 
     try {
-      // Dynamically import IotaDID to keep the top-level import light.
       const { IotaDID } = await import("@iota/identity-wasm/web");
       const did = IotaDID.parse(input.trim());
       const doc = await readOnlyClient.resolveDid(did);
@@ -35,98 +58,99 @@ export function ResolveIdentity() {
   }
 
   return (
-    <div className="card space-y-5">
+    <div className="card card-lift fade-in" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div>
-        <h2 className="text-lg font-semibold text-gray-100">Resolve a DID</h2>
-        <p className="mt-1 text-sm text-gray-400">
-          Look up any <code className="text-iota-400">did:iota</code> identifier on the
-          current network.
+        <h2 style={{ fontSize: 17, fontWeight: 700, color: "var(--text-1)", marginBottom: 6 }}>Resolve a DID</h2>
+        <p style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.5 }}>
+          Look up any{" "}
+          <code style={{ fontFamily: "var(--font-mono)", color: "#7dd3fc", background: "rgba(14,165,233,0.1)", padding: "1px 5px", borderRadius: 4 }}>
+            did:iota
+          </code>{" "}
+          identifier on the current network.
         </p>
       </div>
 
-      <div className="flex gap-2">
+      {/* Search row */}
+      <div style={{ display: "flex", gap: 8 }}>
         <input
           className="input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleResolve()}
-          placeholder="did:iota:0x…"
+          onKeyDown={(e) => e.key === "Enter" && !resolving && handleResolve()}
+          placeholder="did:iota:testnet:0x…"
+          style={{ flex: 1 }}
         />
         <button
+          className="btn btn-primary"
           onClick={handleResolve}
           disabled={resolving || !isReady || !input.trim()}
-          className="btn-primary whitespace-nowrap"
+          style={{ padding: "10px 20px", flexShrink: 0 }}
         >
-          {resolving ? "Resolving…" : "Resolve"}
+          {resolving ? <><Spinner /> Resolving…</> : "Resolve"}
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-950/50 border border-red-800/50 rounded-lg p-3 text-sm text-red-300">
-          {error}
-        </div>
-      )}
+      {error && <div className="banner-error">{error}</div>}
 
       {document && (
-        <div className="space-y-4">
-          {/* DID */}
-          <div>
-            <span className="label">DID</span>
-            <p className="font-mono text-xs text-iota-300 break-all">
-              {document.id().toString()}
-            </p>
-            <a
-              href={explorerObjectUrl(document.id().tag(), document.id().network())}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-block mt-1 text-xs text-iota-400 hover:underline"
-            >
-              View on IOTA Explorer ↗
-            </a>
-          </div>
+        <div className="fade-in" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Status + Explorer link */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {document.metadata().deactivated()
+                ? <span className="status-deactivated"><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f87171", display: "inline-block" }} />Deactivated</span>
+                : <span className="status-active"><span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />Active</span>
+              }
+              <a
+                href={explorerObjectUrl(document.id().tag(), document.id().network())}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "#38bdf8", textDecoration: "none" }}
+              >
+                <LinkIcon /> View on Explorer
+              </a>
+            </div>
 
-          {/* Status */}
-          <div>
-            <span className="label">Status</span>
-            {document.metadata().deactivated() ? (
-              <span className="status-badge bg-red-900/40 text-red-300 border border-red-800/40">
-                ● Deactivated
-              </span>
-            ) : (
-              <span className="status-badge bg-green-900/40 text-green-300 border border-green-800/40">
-                ● Active
-              </span>
-            )}
+            {/* DID box */}
+            <div className="did-badge">{document.id().toString()}</div>
           </div>
 
           {/* Timestamps */}
-          {document.metadata().created() && (
-            <div>
-              <span className="label">Created</span>
-              <p className="text-sm text-gray-300">{document.metadata().created()?.toString()}</p>
-            </div>
-          )}
-          {document.metadata().updated() && (
-            <div>
-              <span className="label">Last Updated</span>
-              <p className="text-sm text-gray-300">{document.metadata().updated()?.toString()}</p>
-            </div>
-          )}
+          <div style={{ display: "flex", gap: 20 }}>
+            {document.metadata().created() && (
+              <div>
+                <span className="label">Created</span>
+                <p style={{ fontSize: 13, color: "var(--text-2)" }}>
+                  {document.metadata().created()?.toString().slice(0, 10)}
+                </p>
+              </div>
+            )}
+            {document.metadata().updated() && (
+              <div>
+                <span className="label">Last updated</span>
+                <p style={{ fontSize: 13, color: "var(--text-2)" }}>
+                  {document.metadata().updated()?.toString().slice(0, 10)}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <hr style={{ border: "none", borderTop: "1px solid var(--border)" }} />
 
           {/* Verification Methods */}
           <div>
-            <span className="label">
-              Verification Methods ({document.methods().length})
-            </span>
-            <div className="space-y-2 mt-1">
+            <span className="label">Verification Methods ({document.methods().length})</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
               {document.methods().map((vm) => (
-                <div key={vm.id().toString()} className="bg-gray-800/50 rounded-lg p-3">
-                  <p className="font-mono text-xs text-iota-300 break-all">{vm.id().toString()}</p>
-                  <p className="text-xs text-gray-400 mt-1">Type: {vm.type().toString()}</p>
+                <div key={vm.id().toString()} className="info-card">
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#7dd3fc", wordBreak: "break-all", marginBottom: 4 }}>
+                    {vm.id().toString()}
+                  </p>
+                  <p style={{ fontSize: 11, color: "var(--text-3)" }}>Type: {vm.type().toString()}</p>
                 </div>
               ))}
               {document.methods().length === 0 && (
-                <p className="text-sm text-gray-500 italic">No verification methods</p>
+                <p style={{ fontSize: 13, color: "var(--text-3)", fontStyle: "italic" }}>No verification methods</p>
               )}
             </div>
           </div>
@@ -134,31 +158,50 @@ export function ResolveIdentity() {
           {/* Services */}
           <div>
             <span className="label">Services ({document.service().length})</span>
-            <div className="space-y-2 mt-1">
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
               {document.service().map((svc) => (
-                <div key={svc.id().toString()} className="bg-gray-800/50 rounded-lg p-3 space-y-1">
-                  <p className="font-mono text-xs text-iota-300 break-all">{svc.id().toString()}</p>
-                  <p className="text-xs text-gray-400">Type: {svc.type().join(", ")}</p>
-                  <p className="text-xs text-gray-400 break-all">
-                    Endpoint: {String(svc.serviceEndpoint())}
+                <div key={svc.id().toString()} className="info-card">
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#7dd3fc", wordBreak: "break-all", marginBottom: 4 }}>
+                    {svc.id().toString()}
                   </p>
+                  <p style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 2 }}>Type: {svc.type().join(", ")}</p>
+                  <p style={{ fontSize: 11, color: "var(--text-3)" }}>Endpoint: {String(svc.serviceEndpoint())}</p>
                 </div>
               ))}
               {document.service().length === 0 && (
-                <p className="text-sm text-gray-500 italic">No services</p>
+                <p style={{ fontSize: 13, color: "var(--text-3)", fontStyle: "italic" }}>No services</p>
               )}
             </div>
           </div>
 
-          {/* Raw JSON — full document as serialised JSON */}
-          <details className="group">
-            <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-300 select-none">
-              Raw JSON Document
-            </summary>
-            <pre className="mt-2 bg-gray-800/50 rounded-lg p-3 text-xs text-gray-300 overflow-auto max-h-64 border border-gray-700">
-              {JSON.stringify(document.toJSON(), null, 2)}
-            </pre>
-          </details>
+          {/* Raw JSON */}
+          <div>
+            <button
+              className="btn btn-ghost"
+              onClick={() => setShowRaw((v) => !v)}
+              style={{ padding: "4px 8px", fontSize: 12, gap: 5 }}
+            >
+              <ChevronIcon dir={showRaw ? "up" : "down"} />
+              {showRaw ? "Hide" : "Show"} raw JSON document
+            </button>
+            {showRaw && (
+              <pre style={{
+                marginTop: 8,
+                background: "rgba(0,0,0,0.3)",
+                border: "1px solid rgba(255,255,255,0.06)",
+                borderRadius: 10,
+                padding: 14,
+                fontSize: 11,
+                fontFamily: "var(--font-mono)",
+                color: "var(--text-2)",
+                overflowX: "auto",
+                maxHeight: 260,
+                lineHeight: 1.6,
+              }}>
+                {JSON.stringify(document.toJSON(), null, 2)}
+              </pre>
+            )}
+          </div>
         </div>
       )}
     </div>

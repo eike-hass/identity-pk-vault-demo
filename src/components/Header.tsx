@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ConnectButton, useCurrentAccount, useIotaClientContext } from "@iota/dapp-kit";
 import { getNetwork } from "@iota/iota-sdk/client";
 import type { VaultStatus } from "../hooks/usePasskeyVault";
@@ -5,106 +6,171 @@ import type { Network } from "../networkConfig";
 
 const NETWORKS: { id: Network; label: string }[] = [
   { id: "testnet", label: "Testnet" },
-  { id: "devnet", label: "Devnet" },
-  { id: "localnet", label: "Localnet" },
+  { id: "devnet",  label: "Devnet"  },
+  { id: "localnet",label: "Localnet"},
 ];
 
-const VAULT_STATUS_CONFIG: Record<
-  VaultStatus,
-  { label: string; dot: string; text: string; tooltip: string }
-> = {
-  checking:     { label: "Vault",       dot: "bg-gray-500 animate-pulse", text: "text-gray-400", tooltip: "Checking key vault…"                                                                     },
-  unsupported:  { label: "Unsupported", dot: "bg-amber-500",              text: "text-amber-400", tooltip: "WebAuthn PRF not available. Keys are stored in memory only and lost on page reload."    },
-  unregistered: { label: "Not set up",  dot: "bg-gray-500",               text: "text-gray-400", tooltip: "No key vault found. Create one with your device biometrics to persist signing keys."    },
-  locked:       { label: "Locked",      dot: "bg-orange-500",             text: "text-orange-400", tooltip: "Key vault is locked. Unlock with biometrics to enable signing operations."            },
-  unlocked:     { label: "Unlocked",    dot: "bg-green-500",              text: "text-green-400", tooltip: "Key vault is unlocked. Signing keys are available for this session."                   },
-  error:        { label: "Vault error", dot: "bg-red-500",                text: "text-red-400", tooltip: "Key vault encountered an error. Reload the page to try again."                          },
+const VAULT_CFG: Record<VaultStatus, { label: string; dot: string; text: string; tooltip: string }> = {
+  checking:     { label: "Vault",       dot: "#6b7280", text: "#6b7280", tooltip: "Checking key vault…"                                                                     },
+  unsupported:  { label: "Unsupported", dot: "#f59e0b", text: "#fbbf24", tooltip: "WebAuthn PRF not available. Keys are stored in memory only and lost on page reload."    },
+  unregistered: { label: "Not set up",  dot: "#6b7280", text: "#9ca3af", tooltip: "No key vault found. Create one with your device biometrics to persist signing keys."    },
+  locked:       { label: "Locked",      dot: "#f97316", text: "#fb923c", tooltip: "Key vault is locked. Unlock with biometrics to enable signing."                         },
+  unlocked:     { label: "Unlocked",    dot: "#22c55e", text: "#4ade80", tooltip: "Key vault is unlocked. Signing keys are available for this session."                    },
+  error:        { label: "Vault error", dot: "#f87171", text: "#fca5a5", tooltip: "Key vault error. Reload the page to try again."                                         },
 };
 
-function VaultStatusPill({ status }: { status: VaultStatus }) {
-  const { label, dot, text, tooltip } = VAULT_STATUS_CONFIG[status];
+// ── Logo mark (person + verified badge) ────────────────────────────────────────
+export function LogoMark({ size = 34 }: { size?: number }) {
+  const br = Math.round(size * 0.294);
+  const iconSize = Math.round(size * 0.62);
   return (
-    <div className="relative group hidden sm:flex items-center">
-      <div className={`flex items-center gap-1.5 text-xs font-medium cursor-default ${text}`}>
-        <span className={`w-2 h-2 rounded-full shrink-0 ${dot}`} />
-        {label}
-      </div>
-      {/* Tooltip */}
-      <div className="
-        pointer-events-none absolute right-0 top-full mt-2 z-50
-        w-56 rounded-lg bg-gray-800 border border-gray-700
-        px-3 py-2 text-xs text-gray-300 leading-snug shadow-xl
-        opacity-0 group-hover:opacity-100 transition-opacity duration-150
-      ">
-        {tooltip}
-        {/* Arrow */}
-        <span className="absolute -top-1.5 right-3 w-3 h-3 bg-gray-800 border-l border-t border-gray-700 rotate-45" />
-      </div>
+    <div style={{
+      width: size, height: size,
+      borderRadius: br,
+      background: "linear-gradient(145deg, #0c4a7c 0%, #0369a1 40%, #0ea5e9 100%)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      boxShadow: `0 4px ${Math.round(size * 0.35)}px rgba(14,165,233,0.38), inset 0 1px 0 rgba(255,255,255,0.18)`,
+      flexShrink: 0, position: "relative", overflow: "hidden",
+    }}>
+      {/* Inner glow */}
+      <div style={{
+        position: "absolute", inset: 0, borderRadius: "inherit",
+        background: "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.13) 0%, transparent 65%)",
+        pointerEvents: "none",
+      }} />
+      <svg width={iconSize} height={iconSize} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        {/* Head */}
+        <circle cx="9.5" cy="7" r="3" stroke="white" strokeWidth="1.5" />
+        {/* Shoulders arc */}
+        <path d="M3.5 17.5C3.5 13.8 6.1 11.5 9.5 11.5C12.9 11.5 15.5 13.8 15.5 17.5"
+          stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+        {/* Verified badge ring */}
+        <circle cx="15.5" cy="6" r="3" fill="#0ea5e9" stroke="rgba(12,74,124,0.6)" strokeWidth="0.8" />
+        {/* Checkmark inside badge */}
+        <path d="M14 6L15.1 7.1L17.2 5" stroke="white" strokeWidth="1.2"
+          strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
     </div>
   );
 }
 
+// ── Vault status pill ──────────────────────────────────────────────────────────
+function VaultStatusPill({ status }: { status: VaultStatus }) {
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const cfg = VAULT_CFG[status];
+
+  return (
+    <div
+      style={{ position: "relative" }}
+      onMouseEnter={() => setTooltipVisible(true)}
+      onMouseLeave={() => setTooltipVisible(false)}
+    >
+      <div style={{
+        display: "flex", alignItems: "center", gap: 5,
+        fontSize: 12, fontWeight: 500, color: cfg.text, cursor: "default",
+      }}>
+        <span style={{
+          width: 7, height: 7, borderRadius: "50%",
+          background: cfg.dot, display: "inline-block",
+          boxShadow: `0 0 6px ${cfg.dot}`,
+          flexShrink: 0,
+        }} />
+        {cfg.label}
+      </div>
+      {tooltipVisible && (
+        <div style={{
+          position: "absolute", right: 0, top: "calc(100% + 8px)",
+          width: 200, background: "#0f1c2e",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 10, padding: "10px 12px",
+          fontSize: 12, color: "var(--text-2)", lineHeight: 1.5,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+          pointerEvents: "none", zIndex: 100,
+        }}>
+          {cfg.tooltip}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Header ─────────────────────────────────────────────────────────────────────
 export function Header({ vaultStatus }: { vaultStatus?: VaultStatus }) {
   const account = useCurrentAccount();
   const { network: currentNetwork, selectNetwork } = useIotaClientContext();
 
-  // Detect network mismatch between the dApp's selected network and the wallet's chain.
   const dappChain = (() => {
     try { return getNetwork(currentNetwork).chain; } catch { return null; }
   })();
   const walletChain = account?.chains?.[0] ?? null;
   const networkMismatch =
-    account &&
-    dappChain &&
-    walletChain &&
+    account && dappChain && walletChain &&
     walletChain !== "iota:unknown" &&
     !account.chains.includes(dappChain);
 
   return (
-    <header className="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-50">
+    <header style={{
+      position: "sticky", top: 0, zIndex: 50,
+      borderBottom: "1px solid rgba(255,255,255,0.06)",
+      background: "rgba(2,12,24,0.85)",
+      backdropFilter: "blur(16px)",
+    }}>
       {networkMismatch && (
-        <div className="bg-amber-950/70 border-b border-amber-800/50 px-4 py-1.5 text-center text-xs text-amber-300">
-          Your wallet is on a different network. Please switch your wallet to{" "}
-          <span className="font-semibold capitalize">{currentNetwork}</span> to sign transactions.
+        <div style={{
+          background: "rgba(251,146,60,0.08)",
+          borderBottom: "1px solid rgba(251,146,60,0.22)",
+          padding: "6px 20px",
+          textAlign: "center",
+          fontSize: 12,
+          color: "#fdba74",
+        }}>
+          Your wallet is on a different network. Please switch to{" "}
+          <span style={{ fontWeight: 600 }}>{currentNetwork}</span> to sign transactions.
         </div>
       )}
-      <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        {/* Logo + title */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-iota-500 to-iota-700 flex items-center justify-center select-none shadow-lg shadow-iota-900/60">
-            <svg className="w-5 h-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              {/* Fingerprint — center dot + 3 concentric ridges */}
-              <circle cx="10" cy="13.5" r="1.4" fill="white" />
-              <path d="M7.8 13.5C7.8 10.8 8.7 9 10 9C11.3 9 12.2 10.8 12.2 13.5" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-              <path d="M5.5 13.5C5.5 8.5 7.4 5.5 10 5.5C12.6 5.5 14.5 8.5 14.5 13.5C14.5 15.5 13.8 17 12.5 18" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-              <path d="M3 14C3 6.5 6.1 2.5 10 2.5C13.9 2.5 17 6.5 17 14C17 16.5 16 18.5 14.5 19.5" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </div>
+
+      <div style={{
+        maxWidth: 800, margin: "0 auto", padding: "0 20px",
+        height: 60, display: "flex", alignItems: "center",
+        justifyContent: "space-between", gap: 16,
+      }}>
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <LogoMark size={34} />
           <div>
-            <span className="font-semibold text-gray-100 text-sm">IOTA Identity</span>
-            <span className="ml-1.5 text-gray-500 text-xs hidden sm:inline">Manager</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-1)", letterSpacing: "-0.01em" }}>
+              IOTA Identity
+            </span>
+            <span style={{ fontSize: 12, color: "var(--text-3)", marginLeft: 6 }}>Manager</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Vault status — only shown when a wallet is connected */}
+        {/* Right controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {account && vaultStatus && <VaultStatusPill status={vaultStatus} />}
 
           {/* Network selector */}
           <select
             value={currentNetwork}
             onChange={(e) => selectNetwork(e.target.value as Network)}
-            className="bg-gray-800 border border-gray-700 text-gray-300 text-xs rounded-lg px-2.5 py-1.5
-                       focus:outline-none focus:ring-2 focus:ring-iota-500 cursor-pointer"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: "var(--text-2)",
+              fontSize: 12,
+              borderRadius: 8,
+              padding: "5px 10px",
+              fontFamily: "inherit",
+              cursor: "pointer",
+              outline: "none",
+            }}
           >
             {NETWORKS.map(({ id, label }) => (
-              <option key={id} value={id}>
-                {label}
-              </option>
+              <option key={id} value={id}>{label}</option>
             ))}
           </select>
 
-          {/* Wallet connect */}
+          {/* dApp Kit connect button */}
           <ConnectButton />
         </div>
       </div>

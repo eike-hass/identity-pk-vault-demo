@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useCurrentAccount, useIotaClientContext } from "@iota/dapp-kit";
 import { listDids, putDid, deleteDid, openVaultDb } from "./storage/vault/vaultDb";
-import { Header } from "./components/Header";
+import { Header, LogoMark } from "./components/Header";
 import { CreateIdentity } from "./components/CreateIdentity";
 import { IdentityDashboard } from "./components/IdentityDashboard";
 import { ResolveIdentity } from "./components/ResolveIdentity";
@@ -17,8 +17,8 @@ type Tab = "identity" | "resolve" | "vault";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "identity", label: "My Identity" },
-  { id: "resolve", label: "Resolve DID" },
-  { id: "vault", label: "Key Vault" },
+  { id: "resolve",  label: "Resolve DID" },
+  { id: "vault",    label: "Key Vault"   },
 ];
 
 // ── App ───────────────────────────────────────────────────────────────────────
@@ -26,17 +26,13 @@ export default function App() {
   const account = useCurrentAccount();
   const { network } = useIotaClientContext();
 
-  // Passkey vault — provides persistent encrypted key storage.
   const vault = usePasskeyVault();
-
-  // Pass the vault Storage when unlocked; falls back to JwkMemStore otherwise.
   const { initialising, initError, storage } = useIdentityClient(vault.storage);
 
   const [dids, setDids] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>("identity");
   const [showCreate, setShowCreate] = useState(false);
 
-  // Load all DIDs for the connected account+network whenever either changes.
   useEffect(() => {
     if (!account) {
       setDids([]);
@@ -70,23 +66,36 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <Header vaultStatus={vault.status} />
       {MOCK_MODE && <DevModeBanner />}
 
-      <main className="flex-1 max-w-2xl mx-auto w-full px-4 py-8 space-y-6">
-        {/* Init error (identity client couldn't connect to node) */}
+      <main style={{
+        flex: 1,
+        maxWidth: 680,
+        margin: "0 auto",
+        width: "100%",
+        padding: "28px 20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+      }}>
+        {/* Init error */}
         {initError && (
-          <div className="bg-amber-950/50 border border-amber-800/50 rounded-xl p-4 text-sm text-amber-300">
-            <p className="font-medium">Identity client error</p>
-            <p className="mt-1 text-amber-400/80">{initError}</p>
+          <div className="banner-warn" style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <span style={{ flexShrink: 0 }}>⚠</span>
+            <span>
+              <strong>Identity client error</strong>
+              <br />
+              {initError}
+            </span>
           </div>
         )}
 
-        {/* Not connected — landing banner (shown regardless of vault state) */}
+        {/* Not connected — landing banner */}
         {!account && <LandingBanner initialising={initialising} />}
 
-        {/* Connected — vault gate guards all key operations */}
+        {/* Connected — vault gate guards key operations */}
         {account && (
           <VaultGate
             status={vault.status}
@@ -95,17 +104,13 @@ export default function App() {
             onRegisterAndRestore={vault.registerAndRestore}
             error={vault.error}
           >
-            {/* Tabs */}
-            <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1">
+            {/* Tab bar */}
+            <div className="tab-bar">
               {TABS.map(({ id, label }) => (
                 <button
                   key={id}
                   onClick={() => setTab(id)}
-                  className={`flex-1 text-sm font-medium py-2 rounded-lg transition-colors ${
-                    tab === id
-                      ? "bg-iota-600 text-white shadow"
-                      : "text-gray-400 hover:text-gray-200"
-                  }`}
+                  className={`tab-btn${tab === id ? " active" : ""}`}
                 >
                   {label}
                 </button>
@@ -114,17 +119,17 @@ export default function App() {
 
             {/* Tab panels */}
             {tab === "identity" && (
-              <div className="space-y-4">
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {dids.map((did) => (
                   <IdentityDashboard key={did} did={did} onClear={() => handleForget(did)} />
                 ))}
-
                 {dids.length === 0 || showCreate ? (
                   <CreateIdentity onCreated={handleCreated} storage={storage} />
                 ) : (
                   <button
+                    className="btn btn-secondary"
                     onClick={() => setShowCreate(true)}
-                    className="btn-secondary w-full py-2.5 text-sm"
+                    style={{ width: "100%", padding: "11px 20px" }}
                   >
                     + Create another identity
                   </button>
@@ -133,28 +138,26 @@ export default function App() {
             )}
 
             {tab === "resolve" && <ResolveIdentity />}
-            {tab === "vault" && <VaultBackup vault={vault} onImport={refreshDids} />}
+            {tab === "vault"   && <VaultBackup vault={vault} onImport={refreshDids} />}
           </VaultGate>
         )}
       </main>
 
-      <footer className="border-t border-gray-800 py-4 text-center text-xs text-gray-600">
+      <footer style={{
+        borderTop: "1px solid rgba(255,255,255,0.05)",
+        padding: "16px 20px",
+        textAlign: "center",
+        fontSize: 12,
+        color: "var(--text-3)",
+      }}>
         Built with{" "}
-        <a
-          href="https://docs.iota.org/developer/iota-identity/"
-          target="_blank"
-          rel="noreferrer"
-          className="text-iota-500 hover:underline"
-        >
+        <a href="https://docs.iota.org/developer/iota-identity/" target="_blank" rel="noreferrer"
+           style={{ color: "#38bdf8", textDecoration: "none" }}>
           IOTA Identity
-        </a>{" "}
-        &amp;{" "}
-        <a
-          href="https://docs.iota.org/developer/ts-sdk/dapp-kit/"
-          target="_blank"
-          rel="noreferrer"
-          className="text-iota-500 hover:underline"
-        >
+        </a>
+        {" "}&amp;{" "}
+        <a href="https://docs.iota.org/developer/ts-sdk/dapp-kit/" target="_blank" rel="noreferrer"
+           style={{ color: "#38bdf8", textDecoration: "none" }}>
           dApp Kit
         </a>
       </footer>
@@ -162,52 +165,81 @@ export default function App() {
   );
 }
 
+// ── LandingBanner ─────────────────────────────────────────────────────────────
+const FEATURES = [
+  {
+    icon: (
+      <svg width={15} height={15} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path d="M8 1.5L2.5 4V8C2.5 11.2 4.9 14.1 8 15C11.1 14.1 13.5 11.2 13.5 8V4L8 1.5Z"
+          stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+        <path d="M5.5 8L7.2 9.7L10.5 6.5" stroke="currentColor" strokeWidth="1.3"
+          strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+    text: "Create DIDs anchored to your wallet address",
+  },
+  {
+    icon: (
+      <svg width={15} height={15} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <circle cx="6" cy="7" r="3.5" stroke="currentColor" strokeWidth="1.3" />
+        <path d="M9 8.5L14 8.5M12 8.5V11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      </svg>
+    ),
+    text: "Keys stored in hardware-bound passkey vault",
+  },
+  {
+    icon: <span style={{ fontSize: 13, lineHeight: 1 }}>✎</span>,
+    text: "Update your DID document on-chain",
+  },
+  {
+    icon: <span style={{ fontSize: 13, lineHeight: 1 }}>◎</span>,
+    text: "Resolve any did:iota identifier",
+  },
+];
+
 function LandingBanner({ initialising }: { initialising: boolean }) {
   return (
-    <div className="card text-center space-y-6 py-10">
-      {/* Logo mark */}
-      <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-iota-500 to-iota-700 flex items-center justify-center select-none shadow-xl shadow-iota-900/60">
-        <svg className="w-10 h-10" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-          <circle cx="10" cy="13.5" r="1.4" fill="white" />
-          <path d="M7.8 13.5C7.8 10.8 8.7 9 10 9C11.3 9 12.2 10.8 12.2 13.5" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M5.5 13.5C5.5 8.5 7.4 5.5 10 5.5C12.6 5.5 14.5 8.5 14.5 13.5C14.5 15.5 13.8 17 12.5 18" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M3 14C3 6.5 6.1 2.5 10 2.5C13.9 2.5 17 6.5 17 14C17 16.5 16 18.5 14.5 19.5" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-        </svg>
-      </div>
+    <div className="card fade-in" style={{ textAlign: "center", padding: "48px 32px" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28 }}>
+        <LogoMark size={80} />
 
-      <div>
-        <h1 className="text-2xl font-bold text-gray-100">IOTA Identity Manager</h1>
-        <p className="mt-2 text-gray-400 max-w-md mx-auto">
-          Create and manage self-sovereign digital identities (DIDs) anchored to the IOTA
-          ledger — directly from your browser wallet.
-        </p>
-      </div>
-
-      {initialising ? (
-        <p className="text-sm text-gray-500 animate-pulse">
-          Connecting to the IOTA network…
-        </p>
-      ) : (
-        <div className="space-y-3 text-sm text-gray-400 max-w-xs mx-auto text-left">
-          <Feature icon="🔗">Create a DID anchored to your wallet address</Feature>
-          <Feature icon="📄">Inspect verification methods and services</Feature>
-          <Feature icon="✏️">Update your DID document on-chain</Feature>
-          <Feature icon="🔍">Resolve any did:iota identifier</Feature>
+        <div>
+          <h1 style={{ fontSize: 26, fontWeight: 700, color: "var(--text-1)", marginBottom: 10, letterSpacing: "-0.02em" }}>
+            IOTA Identity Manager
+          </h1>
+          <p style={{ fontSize: 14, color: "var(--text-2)", lineHeight: 1.7, maxWidth: 420, margin: "0 auto" }}>
+            Create and manage self-sovereign digital identities anchored to the IOTA ledger —
+            directly from your browser wallet.
+          </p>
         </div>
-      )}
 
-      <p className="text-sm text-gray-500">
-        Connect your IOTA wallet using the button in the top right to get started.
-      </p>
-    </div>
-  );
-}
+        {initialising ? (
+          <p className="pulse" style={{ fontSize: 13, color: "var(--text-2)" }}>
+            Connecting to the IOTA network…
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, textAlign: "left", width: "100%", maxWidth: 340 }}>
+            {FEATURES.map((f, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{
+                  width: 28, height: 28, borderRadius: 8,
+                  background: "rgba(14,165,233,0.1)",
+                  border: "1px solid rgba(14,165,233,0.2)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  color: "#38bdf8", flexShrink: 0,
+                }}>
+                  {f.icon}
+                </span>
+                <span style={{ fontSize: 13, color: "var(--text-2)" }}>{f.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
-function Feature({ icon, children }: { icon: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="text-base">{icon}</span>
-      <span>{children}</span>
+        <p style={{ fontSize: 13, color: "var(--text-2)" }}>
+          Connect your IOTA wallet using the button in the top right to get started.
+        </p>
+      </div>
     </div>
   );
 }

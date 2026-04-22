@@ -20,31 +20,22 @@ const NANOS_PER_IOTA = 1_000_000_000n;
 function formatBalance(totalBalance: string): string {
   const nanos = BigInt(totalBalance);
   const whole = nanos / NANOS_PER_IOTA;
-  const frac = nanos % NANOS_PER_IOTA;
+  const frac  = nanos % NANOS_PER_IOTA;
   return `${whole}.${frac.toString().padStart(9, "0").slice(0, 3)} IOTA`;
 }
 
 type FundState = "idle" | "loading" | "success" | "error" | "ratelimit";
 
-/**
- * Rendered only when VITE_USE_MOCK=true.
- *
- * Auto-connects to the dApp Kit "Unsafe Burner Wallet" and shows the wallet
- * address, live balance, network, and an inline "Fund wallet" button that
- * calls the faucet API directly without opening an external page.
- */
 export function DevModeBanner() {
-  const wallets = useWallets();
-  const account = useCurrentAccount();
+  const wallets   = useWallets();
+  const account   = useCurrentAccount();
   const { mutate: connectWallet } = useConnectWallet();
   const { network } = useIotaClientContext();
-  const iotaClient = useIotaClient();
+  const iotaClient  = useIotaClient();
   const queryClient = useQueryClient();
-  const [dismissed, setDismissed] = useState(false);
-  const [fundState, setFundState] = useState<FundState>("idle");
+  const [dismissed,  setDismissed]  = useState(false);
+  const [fundState,  setFundState]  = useState<FundState>("idle");
 
-  // Register the stable burner wallet (localStorage-persisted keypair so address
-  // stays the same across page reloads — required for E2E DID tests).
   useEffect(() => {
     return registerStableBurnerWallet(iotaClient as unknown as IotaClient) ?? undefined;
   }, [iotaClient]);
@@ -55,7 +46,6 @@ export function DevModeBanner() {
     { enabled: !!account, refetchInterval: 10_000 },
   );
 
-  // Auto-connect to the burner wallet once it is registered.
   useEffect(() => {
     if (account) return;
     const burner = wallets.find((w) => w.name === BURNER_WALLET_NAME);
@@ -68,11 +58,7 @@ export function DevModeBanner() {
     try {
       await retryAsync(
         () => requestIotaFromFaucetV0({ host: getFaucetHost(network), recipient: account.address }),
-        {
-          attempts: 3,
-          delayMs: 1000,
-          shouldRetry: (err) => !(err instanceof FaucetRateLimitError),
-        },
+        { attempts: 3, delayMs: 1000, shouldRetry: (err) => !(err instanceof FaucetRateLimitError) },
       );
       setFundState("success");
     } catch (err) {
@@ -80,11 +66,9 @@ export function DevModeBanner() {
     }
   }
 
-  // After a successful faucet request, poll until the balance actually increases,
-  // then transition to idle. Effect cleanup aborts the poll on unmount.
   useEffect(() => {
     if (fundState !== "success") return;
-    const controller = new AbortController();
+    const controller  = new AbortController();
     const prevBalance = balanceData?.totalBalance ?? "0";
 
     retryAsync(
@@ -100,7 +84,6 @@ export function DevModeBanner() {
     return () => controller.abort();
   }, [fundState, balanceData, account, queryClient]);
 
-  // Reset error/ratelimit states after a delay.
   useEffect(() => {
     if (fundState !== "error" && fundState !== "ratelimit") return;
     const id = setTimeout(() => setFundState("idle"), 4_000);
@@ -109,79 +92,76 @@ export function DevModeBanner() {
 
   if (dismissed) return null;
 
-  const isZero = balanceData?.totalBalance === "0";
-  const balanceText = balanceLoading
-    ? "…"
-    : balanceData
-      ? formatBalance(balanceData.totalBalance)
-      : "unavailable";
+  const isZero      = balanceData?.totalBalance === "0";
+  const balanceText = balanceLoading ? "…" : balanceData ? formatBalance(balanceData.totalBalance) : "unavailable";
+
+  const addrShort = account
+    ? `${account.address.slice(0, 6)}…${account.address.slice(-4)}`
+    : null;
 
   const fundLabel =
-    fundState === "loading"
-      ? "Requesting…"
-      : fundState === "success"
-        ? "Funded ✓"
-        : fundState === "ratelimit"
-          ? "Rate limited"
-          : fundState === "error"
-            ? "Failed — retry"
-            : isZero
-              ? "⚠ Fund wallet"
-              : "Request tokens";
-
-  const fundColor =
-    fundState === "success"
-      ? "text-green-400"
-      : fundState === "error" || fundState === "ratelimit"
-        ? "text-red-400"
-        : isZero
-          ? "text-red-400 font-semibold"
-          : "text-amber-300 hover:text-amber-200";
+    fundState === "loading"   ? "Requesting…"
+    : fundState === "success" ? "Funded ✓"
+    : fundState === "ratelimit" ? "Rate limited"
+    : fundState === "error"   ? "Failed — retry"
+    : isZero                  ? "⚠ Fund wallet"
+    : "Request tokens";
 
   return (
-    <div className="relative bg-amber-950/60 border-b border-amber-700/50 px-4 py-2 text-xs text-amber-300 flex items-center gap-3 flex-wrap">
-      <span className="font-semibold shrink-0 uppercase tracking-wide text-amber-400">
-        Dev Mode
-      </span>
+    <div style={{
+      background: "rgba(14,165,233,0.08)",
+      borderBottom: "1px solid rgba(14,165,233,0.15)",
+      padding: "6px 20px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 16,
+      fontSize: 12,
+      color: "#7dd3fc",
+    }}>
+      <span style={{ fontWeight: 600, color: "#38bdf8" }}>Demo mode</span>
 
-      <span className="text-amber-400/70">|</span>
+      <span style={{ color: "var(--text-3)" }}>·</span>
 
-      <span className="shrink-0">
+      <span>
         Wallet:{" "}
-        {account ? (
-          <span className="font-mono text-amber-200">
-            {account.address.slice(0, 10)}…{account.address.slice(-6)}
-          </span>
-        ) : (
-          <span className="animate-pulse text-amber-500">connecting…</span>
-        )}
+        {addrShort
+          ? <span style={{ fontFamily: "var(--font-mono)" }}>{addrShort}</span>
+          : <span className="pulse" style={{ color: "var(--text-3)" }}>connecting…</span>
+        }
       </span>
 
       {account && (
         <>
-          <span className="text-amber-400/70">|</span>
-          <span className="shrink-0">
+          <span style={{ color: "var(--text-3)" }}>·</span>
+          <span>
             Balance:{" "}
-            <span className={`font-medium ${isZero ? "text-red-400" : "text-amber-200"}`}>
-              {balanceText}
-            </span>
+            <span style={{ color: isZero ? "#f87171" : "#7dd3fc" }}>{balanceText}</span>
           </span>
         </>
       )}
 
-      <span className="text-amber-400/70">|</span>
-
-      <span className="shrink-0">
-        Network: <span className="font-medium text-amber-200">{network}</span>
-      </span>
+      <span style={{ color: "var(--text-3)" }}>·</span>
+      <span>Network: <span style={{ color: "#38bdf8" }}>{network}</span></span>
 
       {account && (
         <>
-          <span className="text-amber-400/70">|</span>
+          <span style={{ color: "var(--text-3)" }}>·</span>
           <button
             onClick={handleFund}
             disabled={fundState === "loading" || fundState === "success"}
-            className={`shrink-0 underline underline-offset-2 transition-colors disabled:cursor-default disabled:no-underline ${fundColor}`}
+            style={{
+              background: "rgba(14,165,233,0.15)",
+              border: "1px solid rgba(14,165,233,0.3)",
+              borderRadius: 5,
+              padding: "2px 8px",
+              color: fundState === "success" ? "#4ade80"
+                   : fundState === "error" || fundState === "ratelimit" ? "#f87171"
+                   : "#7dd3fc",
+              fontSize: 11,
+              cursor: fundState === "loading" || fundState === "success" ? "default" : "pointer",
+              fontFamily: "inherit",
+            }}
           >
             {fundLabel}
           </button>
@@ -190,7 +170,7 @@ export function DevModeBanner() {
 
       <button
         onClick={() => setDismissed(true)}
-        className="ml-auto shrink-0 text-amber-500 hover:text-amber-300 transition-colors"
+        style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--text-3)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}
         aria-label="Dismiss"
       >
         ✕
