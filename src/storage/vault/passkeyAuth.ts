@@ -100,8 +100,9 @@ export async function registerPasskey(rpName: string): Promise<CryptoKey> {
         { type: "public-key", alg: -8 },  // EdDSA
       ],
       authenticatorSelection: {
-        // Prefer platform (built-in) authenticators (Touch ID, Windows Hello).
-        authenticatorAttachment: "platform",
+        // Do not restrict to platform authenticators — cross-device authenticators
+        // (e.g. Google Password Manager via QR, iCloud Keychain on another device)
+        // also support the PRF extension in Chrome/Edge and must not be excluded.
         residentKey: "required",
         userVerification: "required",
       },
@@ -115,10 +116,10 @@ export async function registerPasskey(rpName: string): Promise<CryptoKey> {
 
   if (!isPrfEnabled(credential)) {
     throw new Error(
-      "The Passkey authenticator does not support the PRF extension. " +
-        "If using Firefox, select your local platform authenticator (Windows Hello or Touch ID) — " +
-        "Firefox does not yet support PRF through cross-device (phone) passkeys. " +
-        "Chrome and Edge support PRF both locally and via cross-device passkeys.",
+      "The selected authenticator does not support the PRF extension. " +
+        "Please use a platform authenticator (Touch ID, Windows Hello, or Google Password Manager) " +
+        "or a cross-device passkey in Chrome/Edge. " +
+        "Firefox does not support PRF on cross-device (phone) passkeys.",
     );
   }
 
