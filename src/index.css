@@ -112,6 +112,126 @@
   50%       { opacity: 0.45; }
 }
 
+/* ── dApp Kit overrides ─────────────────────────────────────────────────────── */
+/*
+ * The WalletProvider theme controls CSS custom properties but cannot express
+ * gradients or box-shadows. We override the generated classes here.
+ * Selectors use [data-dapp-kit] to stay scoped to the library's elements.
+ */
+
+/* Compact button size — matches the network <select> height.
+   Must use both forms: the button element itself carries [data-dapp-kit],
+   so a descendant selector (space) doesn't match it. */
+[data-dapp-kit].Button_buttonVariants_size_md__ctbx2n3,
+[data-dapp-kit] .Button_buttonVariants_size_md__ctbx2n3 {
+  padding: 5px 12px !important;
+  font-size: 12px !important;
+  border-radius: 8px !important;
+  line-height: 1.4 !important;
+}
+/* Connected-account button uses size_lg + AccountDropdownMenu_connectedAccount.
+   Its inner text has line-height:22px, so 3px vertical padding → 28px total height. */
+[data-dapp-kit].Button_buttonVariants_size_lg__ctbx2n4,
+[data-dapp-kit] .Button_buttonVariants_size_lg__ctbx2n4,
+[data-dapp-kit].AccountDropdownMenu_connectedAccount__1x0gmpf0,
+[data-dapp-kit] .AccountDropdownMenu_connectedAccount__1x0gmpf0 {
+  padding: 3px 12px !important;
+  font-size: 12px !important;
+  border-radius: 8px !important;
+  min-height: unset !important;
+  height: auto !important;
+}
+
+/* Primary button → gradient + shadow */
+[data-dapp-kit].Button_buttonVariants_variant_primary__ctbx2n1,
+[data-dapp-kit] .Button_buttonVariants_variant_primary__ctbx2n1 {
+  background: linear-gradient(135deg, #0369a1, #0ea5e9) !important;
+  box-shadow: 0 2px 8px rgba(14,165,233,0.28);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: box-shadow 0.15s, transform 0.12s;
+}
+[data-dapp-kit].Button_buttonVariants_variant_primary__ctbx2n1:hover:not(:disabled),
+[data-dapp-kit] .Button_buttonVariants_variant_primary__ctbx2n1:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0284c7, #38bdf8) !important;
+  box-shadow: 0 3px 14px rgba(14,165,233,0.42);
+}
+[data-dapp-kit].Button_buttonVariants_variant_primary__ctbx2n1:active:not(:disabled),
+[data-dapp-kit] .Button_buttonVariants_variant_primary__ctbx2n1:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* Outline button (connected-wallet button shown in the modal) */
+[data-dapp-kit].Button_buttonVariants_variant_outline__ctbx2n2,
+[data-dapp-kit] .Button_buttonVariants_variant_outline__ctbx2n2 {
+  border-color: rgba(255,255,255,0.12) !important;
+}
+[data-dapp-kit].Button_buttonVariants_variant_outline__ctbx2n2:hover,
+[data-dapp-kit] .Button_buttonVariants_variant_outline__ctbx2n2:hover {
+  background: rgba(255,255,255,0.07) !important;
+}
+
+/* Modal card — deeper backdrop + border */
+[data-dapp-kit] .ConnectModal_container__17mljma2 {
+  border: 1px solid rgba(255,255,255,0.08) !important;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.7) !important;
+}
+
+/* Wallet list item hover */
+[data-dapp-kit] [data-state="active"],
+[data-dapp-kit] [data-selected="true"] {
+  border-color: rgba(14,165,233,0.3) !important;
+}
+
+/* Account dropdown menu — match network selector style */
+[data-dapp-kit].AccountDropdownMenu_menuContent__1x0gmpf2,
+[data-dapp-kit] .AccountDropdownMenu_menuContent__1x0gmpf2 {
+  background: #080c18 !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.04) !important;
+  padding: 4px !important;
+  min-width: 160px !important;
+}
+
+[data-dapp-kit].AccountDropdownMenu_menuItem__1x0gmpf4,
+[data-dapp-kit] .AccountDropdownMenu_menuItem__1x0gmpf4 {
+  border-radius: 7px !important;
+  padding: 7px 12px !important;
+  font-size: 12px !important;
+  font-family: inherit !important;
+  color: var(--text-2) !important;
+  cursor: pointer !important;
+  transition: background 0.12s, color 0.12s !important;
+}
+
+[data-dapp-kit].AccountDropdownMenu_menuItem__1x0gmpf4:hover,
+[data-dapp-kit] .AccountDropdownMenu_menuItem__1x0gmpf4:hover {
+  background: rgba(255,255,255,0.06) !important;
+  color: var(--text-1) !important;
+}
+
+/* Active account row — highlight like network selector */
+[data-dapp-kit].AccountDropdownMenu_switchAccountMenuItem__1x0gmpf5,
+[data-dapp-kit] .AccountDropdownMenu_switchAccountMenuItem__1x0gmpf5 {
+  background: rgba(14,165,233,0.1) !important;
+  color: #38bdf8 !important;
+  font-weight: 600 !important;
+  font-family: var(--font-mono) !important;
+}
+
+[data-dapp-kit].AccountDropdownMenu_switchAccountMenuItem__1x0gmpf5:hover,
+[data-dapp-kit] .AccountDropdownMenu_switchAccountMenuItem__1x0gmpf5:hover {
+  background: rgba(14,165,233,0.15) !important;
+}
+
+[data-dapp-kit].AccountDropdownMenu_separator__1x0gmpf6,
+[data-dapp-kit] .AccountDropdownMenu_separator__1x0gmpf6 {
+  background: rgba(255,255,255,0.07) !important;
+  margin: 4px 0 !important;
+  height: 1px !important;
+}
+
 /* ── Components ─────────────────────────────────────────────────────────────── */
 @layer components {
 

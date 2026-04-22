@@ -4,32 +4,62 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { IotaClientProvider, WalletProvider, darkTheme } from "@iota/dapp-kit";
 import "@iota/dapp-kit/dist/index.css";
 
-// Custom theme: darkTheme base, overridden to match the app's gray-950 + iota-600 palette.
+// Custom theme — matches the new Space Grotesk + deep navy palette.
 const appTheme = {
   ...darkTheme,
+  blurs: {
+    modalOverlay: "blur(16px)",
+  },
   backgroundColors: {
     ...darkTheme.backgroundColors,
-    primaryButton: "#0284c7",         // iota-600
-    primaryButtonHover: "#0ea5e9",    // iota-500
-    outlineButtonHover: "#1f2937",    // gray-800
-    modalPrimary: "#111827",          // gray-900
-    modalSecondary: "#1f2937",        // gray-800
-    dropdownMenu: "#111827",          // gray-900
-    dropdownMenuSeparator: "#374151", // gray-700
-    walletItemHover: "rgba(255,255,255,0.05)",
-    walletItemSelected: "rgba(255,255,255,0.10)",
-    scrollThumb: "#374151",           // gray-700
-    modalOverlay: "rgba(0,0,0,0.75)",
+    primaryButton:       "#0369a1",               // resting (overridden to gradient via CSS)
+    primaryButtonHover:  "#0ea5e9",               // hover (overridden via CSS)
+    outlineButtonHover:  "rgba(255,255,255,0.08)",
+    modalPrimary:        "#080c18",               // deep navy card
+    modalSecondary:      "#0d1525",               // slightly lighter
+    dropdownMenu:        "#080c18",
+    dropdownMenuSeparator: "rgba(255,255,255,0.07)",
+    walletItemHover:     "rgba(255,255,255,0.05)",
+    walletItemSelected:  "rgba(14,165,233,0.12)",
+    scrollThumb:         "rgba(255,255,255,0.12)",
+    modalOverlay:        "rgba(0,0,0,0.75)",
+    iconButton:          "transparent",
   },
   borderColors: {
-    outlineButton: "#374151",         // gray-700
+    outlineButton: "rgba(255,255,255,0.1)",
   },
   colors: {
     ...darkTheme.colors,
-    primaryButton: "#ffffff",
-    outlineButtonHover: "#f3f4f6",    // gray-100
-    body: "#f3f4f6",                  // gray-100
-    bodyMuted: "#9ca3af",             // gray-400
+    primaryButton:      "#ffffff",
+    outlineButtonHover: "#e2eeff",
+    iconButton:         "#7090a8",
+    body:               "#e2eeff",
+    bodyMuted:          "#7090a8",
+    bodyDanger:         "#fca5a5",
+  },
+  radii: {
+    small:   "6px",
+    medium:  "8px",
+    large:   "12px",
+    xlarge:  "16px",
+    full:    "9px",        // square-ish buttons instead of pills
+  },
+  typography: {
+    fontFamily: '"Space Grotesk", system-ui, sans-serif',
+    fontStyle:  "normal",
+    lineHeight: "22px",
+    letterSpacing: "0.01em",
+  },
+  fontWeights: {
+    normal: "400",
+    medium: "500",
+    bold:   "600",
+  },
+  fontSizes: {
+    small:   "13px",
+    medium:  "14px",
+    large:   "16px",
+    xlarge:  "18px",
   },
 };
 

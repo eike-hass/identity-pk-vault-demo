@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ConnectButton, useCurrentAccount, useIotaClientContext } from "@iota/dapp-kit";
 import { getNetwork } from "@iota/iota-sdk/client";
 import type { VaultStatus } from "../hooks/usePasskeyVault";
@@ -94,10 +94,97 @@ function VaultStatusPill({ status }: { status: VaultStatus }) {
   );
 }
 
+// ── Network selector (custom dropdown) ────────────────────────────────────────
+function NetworkSelect() {
+  const { network: currentNetwork, selectNetwork } = useIotaClientContext();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const current = NETWORKS.find(n => n.id === currentNetwork) ?? NETWORKS[0];
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: "rgba(255,255,255,0.05)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          color: "var(--text-2)",
+          fontSize: 12, fontFamily: "inherit", fontWeight: 500,
+          borderRadius: 8, padding: "3px 10px",
+          cursor: "pointer", outline: "none",
+          transition: "border-color 0.15s, background 0.15s",
+          height: 28,
+        }}
+        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.16)"; (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)"; }}
+        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.08)"; (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
+      >
+        {current.label}
+        <svg width={10} height={10} viewBox="0 0 10 10" fill="none" aria-hidden="true"
+          style={{ transition: "transform 0.15s", transform: open ? "rotate(180deg)" : "none", opacity: 0.6 }}>
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", right: 0, top: "calc(100% + 6px)",
+          minWidth: 120, zIndex: 200,
+          background: "#080c18",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 10,
+          boxShadow: "0 12px 40px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.04) inset",
+          overflow: "hidden",
+          padding: "4px",
+        }}>
+          {NETWORKS.map(({ id, label }) => {
+            const active = id === currentNetwork;
+            return (
+              <button
+                key={id}
+                onClick={() => { selectNetwork(id as Network); setOpen(false); }}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  width: "100%", padding: "7px 12px",
+                  fontSize: 12, fontFamily: "inherit", fontWeight: active ? 600 : 400,
+                  color: active ? "#38bdf8" : "var(--text-2)",
+                  background: active ? "rgba(14,165,233,0.1)" : "transparent",
+                  border: "none", borderRadius: 7, cursor: "pointer",
+                  textAlign: "left",
+                  transition: "background 0.12s, color 0.12s",
+                }}
+                onMouseEnter={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.06)"; (e.currentTarget as HTMLElement).style.color = "var(--text-1)"; } }}
+                onMouseLeave={e => { if (!active) { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.color = "var(--text-2)"; } }}
+              >
+                {label}
+                {active && (
+                  <svg width={12} height={12} viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                    <path d="M2.5 6L5 8.5L9.5 3.5" stroke="#38bdf8" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Header ─────────────────────────────────────────────────────────────────────
 export function Header({ vaultStatus }: { vaultStatus?: VaultStatus }) {
   const account = useCurrentAccount();
-  const { network: currentNetwork, selectNetwork } = useIotaClientContext();
+  const { network: currentNetwork } = useIotaClientContext();
 
   const dappChain = (() => {
     try { return getNetwork(currentNetwork).chain; } catch { return null; }
@@ -150,25 +237,7 @@ export function Header({ vaultStatus }: { vaultStatus?: VaultStatus }) {
           {account && vaultStatus && <VaultStatusPill status={vaultStatus} />}
 
           {/* Network selector */}
-          <select
-            value={currentNetwork}
-            onChange={(e) => selectNetwork(e.target.value as Network)}
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              color: "var(--text-2)",
-              fontSize: 12,
-              borderRadius: 8,
-              padding: "5px 10px",
-              fontFamily: "inherit",
-              cursor: "pointer",
-              outline: "none",
-            }}
-          >
-            {NETWORKS.map(({ id, label }) => (
-              <option key={id} value={id}>{label}</option>
-            ))}
-          </select>
+          <NetworkSelect />
 
           {/* dApp Kit connect button */}
           <ConnectButton />
