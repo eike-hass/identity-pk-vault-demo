@@ -17,7 +17,7 @@ function makeProps(overrides: Partial<Parameters<typeof VaultGate>[0]> = {}) {
 describe("VaultGate — checking state", () => {
   it("shows a loading indicator", () => {
     render(<VaultGate {...makeProps({ status: "checking" })} />);
-    expect(screen.getByText(/loading key vault/i)).toBeInTheDocument();
+    expect(screen.getByText(/checking key vault/i)).toBeInTheDocument();
     expect(screen.queryByTestId("children")).not.toBeInTheDocument();
   });
 });

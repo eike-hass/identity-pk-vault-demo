@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { IotaDocument } from "@iota/identity-wasm/web";
 import { useIdentityClient } from "../hooks/useIdentityClient";
+import { CopyButton } from "./CopyButton";
 import { explorerObjectUrl } from "../lib/explorerUrl";
 
 function Spinner() {
@@ -112,7 +113,10 @@ export function ResolveIdentity() {
             </div>
 
             {/* DID box */}
-            <div className="did-badge">{document.id().toString()}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <div className="did-badge" style={{ flex: 1 }}>{document.id().toString()}</div>
+              <CopyButton text={document.id().toString()} />
+            </div>
           </div>
 
           {/* Timestamps */}
@@ -143,9 +147,12 @@ export function ResolveIdentity() {
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
               {document.methods().map((vm) => (
                 <div key={vm.id().toString()} className="info-card">
-                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#7dd3fc", wordBreak: "break-all", marginBottom: 4 }}>
-                    {vm.id().toString()}
-                  </p>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 4, marginBottom: 4 }}>
+                    <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#7dd3fc", wordBreak: "break-all", flex: 1 }}>
+                      {vm.id().toString()}
+                    </p>
+                    <CopyButton text={vm.id().toString()} />
+                  </div>
                   <p style={{ fontSize: 11, color: "var(--text-3)" }}>Type: {vm.type().toString()}</p>
                 </div>
               ))}

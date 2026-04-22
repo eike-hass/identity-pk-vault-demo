@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 import { Header } from "../../components/Header";
 
 vi.mock("@iota/dapp-kit", () => ({
@@ -82,10 +82,9 @@ describe("Header — network mismatch banner", () => {
     mockContext("testnet");
     mockAccount(["iota:devnet"]);
     render(<Header />);
-    // Scope to the banner div to avoid matching the <option>Testnet</option> in the select.
     const banner = screen.getByText(/different network/i).closest("div")!;
-    expect(within(banner).getByText(/switch your wallet to/i)).toBeInTheDocument();
-    // The <span className="font-semibold capitalize"> holds the exact (lowercase) network value.
+    expect(banner.textContent).toMatch(/switch to/i);
+    // The <span> holds the exact (lowercase) network value.
     expect(within(banner).getByText("testnet")).toBeInTheDocument();
   });
 
@@ -123,15 +122,19 @@ describe("Header — vault status pill", () => {
 });
 
 describe("Header — network selector", () => {
-  it("renders a network select element", () => {
+  it("renders a network selector button", () => {
     render(<Header />);
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    // Custom dropdown trigger shows the current network name
+    expect(screen.getByRole("button", { name: /devnet/i })).toBeInTheDocument();
   });
 
-  it("shows Testnet, Devnet, Localnet options", () => {
+  it("shows Testnet, Devnet, Localnet options when opened", () => {
     render(<Header />);
-    const select = screen.getByRole("combobox");
-    const options = within(select).getAllByRole("option");
-    expect(options.map((o) => o.textContent)).toEqual(["Testnet", "Devnet", "Localnet"]);
+    // Open the custom dropdown
+    fireEvent.click(screen.getByRole("button", { name: /devnet/i }));
+    const buttonLabels = screen.getAllByRole("button").map((b) => b.textContent?.trim());
+    expect(buttonLabels).toContain("Testnet");
+    expect(buttonLabels).toContain("Devnet");
+    expect(buttonLabels).toContain("Localnet");
   });
 });

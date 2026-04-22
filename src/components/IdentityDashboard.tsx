@@ -3,6 +3,7 @@ import { IotaDID } from "@iota/identity-wasm/web";
 import type { IotaDocument } from "@iota/identity-wasm/web";
 import { useIdentityClient } from "../hooks/useIdentityClient";
 import { UpdateIdentity } from "./UpdateIdentity";
+import { CopyButton } from "./CopyButton";
 import { explorerObjectUrl } from "../lib/explorerUrl";
 import { retryAsync } from "../lib/retryAsync";
 
@@ -107,7 +108,10 @@ export function IdentityDashboard({ did, onClear }: Props) {
               </div>
 
               {/* DID box */}
-              <div className="did-badge">{did}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                <div className="did-badge" style={{ flex: 1 }}>{did}</div>
+                <CopyButton text={did} />
+              </div>
 
               {/* Explorer + created date */}
               <div style={{ display: "flex", gap: 12, marginTop: 8, alignItems: "center" }}>
@@ -165,9 +169,12 @@ export function IdentityDashboard({ did, onClear }: Props) {
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
                   {document.methods().map((vm) => (
                     <div key={vm.id().toString()} className="info-card">
-                      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#7dd3fc", wordBreak: "break-all", marginBottom: 4 }}>
-                        {vm.id().toString()}
-                      </p>
+                      <div style={{ display: "flex", alignItems: "flex-start", gap: 4, marginBottom: 4 }}>
+                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#7dd3fc", wordBreak: "break-all", flex: 1 }}>
+                          {vm.id().toString()}
+                        </p>
+                        <CopyButton text={vm.id().toString()} />
+                      </div>
                       <p style={{ fontSize: 11, color: "var(--text-3)" }}>Type: {vm.type().toString()}</p>
                     </div>
                   ))}
@@ -225,27 +232,29 @@ export function IdentityDashboard({ did, onClear }: Props) {
                 )}
               </div>
 
-              {/* Update Identity button */}
-              {!document.metadata().deactivated() && (
-                <div style={{ display: "flex", gap: 8, paddingTop: 4 }}>
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setShowUpdate((s) => !s)}
-                    style={{ fontSize: 13 }}
-                  >
-                    {showUpdate ? "Cancel" : "Update Identity"}
-                  </button>
-                </div>
-              )}
+              {/* Update / Reactivate button */}
+              <div style={{ display: "flex", gap: 8, paddingTop: 4 }}>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => setShowUpdate((s) => !s)}
+                  style={{ fontSize: 13 }}
+                >
+                  {showUpdate
+                    ? "Cancel"
+                    : document.metadata().deactivated()
+                    ? "Reactivate Identity"
+                    : "Update Identity"}
+                </button>
+              </div>
             </>
           )}
         </div>
       </div>
 
       {/* Inline update panel */}
-      {showUpdate && (
+      {showUpdate && document && (
         <div className="slide-in">
-          <UpdateIdentity did={did} onUpdated={handleUpdated} />
+          <UpdateIdentity did={did} document={document} onUpdated={handleUpdated} />
         </div>
       )}
     </div>

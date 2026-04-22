@@ -30,6 +30,7 @@ export default function App() {
   const { initialising, initError, storage } = useIdentityClient(vault.storage);
 
   const [dids, setDids] = useState<string[]>([]);
+  const [selectedDid, setSelectedDid] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("identity");
   const [showCreate, setShowCreate] = useState(false);
 
@@ -41,7 +42,10 @@ export default function App() {
     }
     openVaultDb()
       .then((db) => listDids(db, account.address, network))
-      .then(setDids);
+      .then((fetched) => {
+        setDids(fetched);
+        setSelectedDid(fetched.length > 0 ? fetched[0] : null);
+      });
     setShowCreate(false);
   }, [account, network]);
 
@@ -50,6 +54,7 @@ export default function App() {
     const db = await openVaultDb();
     await putDid(db, account.address, network, newDid);
     setDids((prev) => [...prev, newDid]);
+    setSelectedDid(newDid);
     setShowCreate(false);
   }
 
@@ -62,7 +67,11 @@ export default function App() {
   async function handleForget(did: string) {
     const db = await openVaultDb();
     await deleteDid(db, did);
-    setDids((prev) => prev.filter((d) => d !== did));
+    setDids((prev) => {
+      const next = prev.filter((d) => d !== did);
+      setSelectedDid(next.length > 0 ? next[0] : null);
+      return next;
+    });
   }
 
   return (
@@ -120,9 +129,53 @@ export default function App() {
             {/* Tab panels */}
             {tab === "identity" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {dids.map((did) => (
-                  <IdentityDashboard key={did} did={did} onClear={() => handleForget(did)} />
-                ))}
+                {/* Multi-DID selector — only shown when 2+ DIDs exist */}
+                {dids.length > 1 && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {dids.map((did) => {
+                      const parts = did.split(":");
+                      const tag = parts[parts.length - 1] ?? did;
+                      const abbrev = tag.length > 16
+                        ? `${tag.slice(0, 8)}…${tag.slice(-6)}`
+                        : tag;
+                      const active = did === selectedDid;
+                      return (
+                        <button
+                          key={did}
+                          onClick={() => { setSelectedDid(did); setShowCreate(false); }}
+                          title={did}
+                          style={{
+                            padding: "5px 12px",
+                            fontSize: 11,
+                            fontFamily: "var(--font-mono)",
+                            borderRadius: 8,
+                            border: active
+                              ? "1px solid rgba(14,165,233,0.5)"
+                              : "1px solid rgba(255,255,255,0.08)",
+                            background: active
+                              ? "rgba(14,165,233,0.12)"
+                              : "rgba(255,255,255,0.04)",
+                            color: active ? "#38bdf8" : "var(--text-2)",
+                            cursor: "pointer",
+                            transition: "all 0.15s",
+                          }}
+                        >
+                          {abbrev}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Active dashboard */}
+                {selectedDid && !showCreate && (
+                  <IdentityDashboard
+                    key={selectedDid}
+                    did={selectedDid}
+                    onClear={() => handleForget(selectedDid)}
+                  />
+                )}
+
                 {dids.length === 0 || showCreate ? (
                   <CreateIdentity onCreated={handleCreated} storage={storage} />
                 ) : (
