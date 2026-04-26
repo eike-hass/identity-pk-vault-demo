@@ -139,9 +139,17 @@ export function UpdateIdentity({ did, document, storage, onUpdated, onDeleted }:
         onUpdated();
 
       } else if (mode === "deactivate") {
-        await onChainIdentity
-          .deactivateDid(controllerToken)
-          .buildAndExecute(identityClient);
+        if (isDeactivated) {
+          const doc = await identityClient.resolveDid(iotaDid);
+          doc.setMetadataDeactivated(false);
+          await onChainIdentity
+            .updateDidDocument(doc, controllerToken)
+            .buildAndExecute(identityClient);
+        } else {
+          await onChainIdentity
+            .deactivateDid(controllerToken)
+            .buildAndExecute(identityClient);
+        }
         onUpdated();
 
       } else if (mode === "delete") {

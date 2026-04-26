@@ -5,8 +5,17 @@ import { IdentityDashboard } from "../../components/IdentityDashboard";
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 vi.mock("@iota/identity-wasm/web", () => ({
-  IotaDID: { parse: vi.fn((s: string) => s) },
-  // Types only — no runtime values needed beyond the parse stub above.
+  IotaDID: {
+    parse: vi.fn((s: string) => ({
+      toString:   () => s,
+      toObjectID: () => "obj-0xabc123",
+      join:       (f: string) => `${s}${f}`,
+    })),
+  },
+  DIDUrl:       { parse: vi.fn((s: string) => s) },
+  JwkMemStore:  { ed25519KeyType: vi.fn(() => "Ed25519") },
+  MethodScope:  { VerificationMethod: vi.fn(() => ({})) },
+  Service:      vi.fn((data: unknown) => data),
 }));
 
 vi.mock("../../hooks/useIdentityClient", () => ({
@@ -14,7 +23,6 @@ vi.mock("../../hooks/useIdentityClient", () => ({
 }));
 
 vi.mock("../../lib/retryAsync", () => ({
-  // Immediately call the function — no retry delay in tests.
   retryAsync: vi.fn((fn: () => Promise<unknown>) => fn()),
 }));
 
@@ -22,7 +30,6 @@ vi.mock("../../lib/explorerUrl", () => ({
   explorerObjectUrl: vi.fn(() => "https://explorer.example.com/obj/0xabc"),
 }));
 
-// CopyButton uses navigator.clipboard; stub it so tests don't fail.
 Object.defineProperty(navigator, "clipboard", {
   value: { writeText: vi.fn().mockResolvedValue(undefined) },
   writable: true,
@@ -52,18 +59,23 @@ function makeService(id: string) {
 
 function makeDocument({
   deactivated = false,
-  methods = [makeMethod(`${TEST_DID}#key-1`)],
-  services = [] as ReturnType<typeof makeService>[],
-  created = "2024-01-01T00:00:00Z",
+  methods     = [makeMethod(`${TEST_DID}#key-1`)],
+  services    = [] as ReturnType<typeof makeService>[],
+  created     = "2024-01-01T00:00:00Z",
 } = {}) {
   return {
     metadata: () => ({
       deactivated: () => deactivated,
       created:     () => ({ toString: () => created }),
     }),
-    methods:  () => methods,
-    service:  () => services,
-    toJSON:   () => ({ id: TEST_DID }),
+    methods:               () => methods,
+    service:               () => services,
+    toJSON:                () => ({ id: TEST_DID }),
+    generateMethod:        vi.fn().mockResolvedValue(undefined),
+    purgeMethod:           vi.fn().mockResolvedValue(undefined),
+    insertService:         vi.fn(),
+    removeService:         vi.fn(),
+    setMetadataDeactivated: vi.fn(),
   } as never;
 }
 
@@ -76,19 +88,35 @@ function makeProps(overrides: Partial<Parameters<typeof IdentityDashboard>[0]> =
   };
 }
 
+function makeOnChainIdentity() {
+  const buildAndExecute = vi.fn().mockResolvedValue(undefined);
+  const builder = { buildAndExecute };
+  return {
+    getControllerToken: vi.fn().mockResolvedValue("token"),
+    updateDidDocument:  vi.fn().mockReturnValue(builder),
+    deactivateDid:      vi.fn().mockReturnValue(builder),
+    deleteDid:          vi.fn().mockReturnValue(builder),
+  };
+}
+
 const mockResolveDid = vi.fn();
 
 beforeEach(() => {
-  vi.mocked(useIdentityClient).mockReturnValue({
-    readOnlyClient:       { resolveDid: mockResolveDid } as never,
-    createIdentityClient: vi.fn(),
-    storage:              {} as never,
-    initialising:         false,
-    initError:            null,
-    isReady:              true,
-    isWalletConnected:    true,
-  });
+  mockResolveDid.mockClear();
   mockResolveDid.mockResolvedValue(makeDocument());
+
+  vi.mocked(useIdentityClient).mockReturnValue({
+    readOnlyClient: { resolveDid: mockResolveDid } as never,
+    createIdentityClient: vi.fn().mockResolvedValue({
+      getIdentity: vi.fn().mockResolvedValue({ toFullFledged: () => makeOnChainIdentity() }),
+      resolveDid:  vi.fn().mockResolvedValue(makeDocument()),
+    }),
+    storage:           {} as never,
+    initialising:      false,
+    initError:         null,
+    isReady:           true,
+    isWalletConnected: true,
+  });
 });
 
 // ── DID display ───────────────────────────────────────────────────────────────
@@ -101,7 +129,6 @@ describe("IdentityDashboard — DID display", () => {
 
   it("renders a copy button for the DID", () => {
     render(<IdentityDashboard {...makeProps()} />);
-    // CopyButton renders a <button> with title "Copy to clipboard"
     expect(screen.getAllByTitle("Copy to clipboard").length).toBeGreaterThanOrEqual(1);
   });
 
@@ -115,7 +142,6 @@ describe("IdentityDashboard — DID display", () => {
 
 describe("IdentityDashboard — loading and error states", () => {
   it("shows a resolving indicator while loading", () => {
-    // Never resolves during this test.
     mockResolveDid.mockReturnValue(new Promise(() => {}));
     render(<IdentityDashboard {...makeProps()} />);
     expect(screen.getByText(/resolving did document/i)).toBeInTheDocument();
@@ -152,54 +178,226 @@ describe("IdentityDashboard — status badge", () => {
 // ── Verification methods ──────────────────────────────────────────────────────
 
 describe("IdentityDashboard — verification methods", () => {
-  it("renders each verification method ID with a copy button", async () => {
-    const doc = makeDocument({
+  it("renders each verification method ID", async () => {
+    mockResolveDid.mockResolvedValue(makeDocument({
       methods: [
         makeMethod(`${TEST_DID}#key-1`),
         makeMethod(`${TEST_DID}#key-2`),
       ],
-    });
-    mockResolveDid.mockResolvedValue(doc);
+    }));
     render(<IdentityDashboard {...makeProps()} />);
     await waitFor(() =>
       expect(screen.getByText(`${TEST_DID}#key-1`)).toBeInTheDocument(),
     );
     expect(screen.getByText(`${TEST_DID}#key-2`)).toBeInTheDocument();
-    // Each method gets its own copy button + the DID badge copy button = 3 total.
-    expect(screen.getAllByTitle("Copy to clipboard")).toHaveLength(3);
+  });
+
+  it("does not show a trash button when the document has only one method", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    await waitFor(() =>
+      expect(screen.getByText(`${TEST_DID}#key-1`)).toBeInTheDocument(),
+    );
+    expect(screen.queryByTitle("Remove key")).not.toBeInTheDocument();
+  });
+
+  it("shows trash buttons when the document has multiple methods", async () => {
+    mockResolveDid.mockResolvedValue(makeDocument({
+      methods: [
+        makeMethod(`${TEST_DID}#key-1`),
+        makeMethod(`${TEST_DID}#key-2`),
+      ],
+    }));
+    render(<IdentityDashboard {...makeProps()} />);
+    await waitFor(() =>
+      expect(screen.getAllByTitle("Remove key")).toHaveLength(2),
+    );
   });
 });
 
-// ── Update / Reactivate button ────────────────────────────────────────────────
+// ── Add verification key inline form ─────────────────────────────────────────
 
-describe("IdentityDashboard — Update / Reactivate button", () => {
-  it("shows 'Update Identity' for an active DID", async () => {
+describe("IdentityDashboard — add verification key form", () => {
+  it("shows the Add verification key button once the document loads", async () => {
     render(<IdentityDashboard {...makeProps()} />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /update identity/i })).toBeInTheDocument(),
+      expect(screen.getByRole("button", { name: /add verification key/i })).toBeInTheDocument(),
     );
   });
 
-  it("shows 'Reactivate Identity' for a deactivated DID", async () => {
+  it("clicking Add verification key reveals the inline form", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /add verification key/i }));
+    expect(screen.getByText("Add Verification Key")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("#key-2")).toBeInTheDocument();
+  });
+
+  it("closing the add key form with ✕ hides it", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /add verification key/i }));
+    fireEvent.click(screen.getByText("✕"));
+    await waitFor(() =>
+      expect(screen.queryByText("Add Verification Key")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("submitting the form calls createIdentityClient", async () => {
+    const createIdentityClient = vi.fn().mockResolvedValue({
+      getIdentity: vi.fn().mockResolvedValue({ toFullFledged: () => makeOnChainIdentity() }),
+      resolveDid:  vi.fn().mockResolvedValue(makeDocument()),
+    });
+    vi.mocked(useIdentityClient).mockReturnValue({
+      readOnlyClient:       { resolveDid: mockResolveDid } as never,
+      createIdentityClient,
+      storage:              {} as never,
+      initialising:         false,
+      initError:            null,
+      isReady:              true,
+      isWalletConnected:    true,
+    });
+
+    render(<IdentityDashboard {...makeProps()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /add verification key/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^add key$/i }));
+    await waitFor(() => expect(createIdentityClient).toHaveBeenCalledTimes(1));
+  });
+});
+
+// ── Services ──────────────────────────────────────────────────────────────────
+
+describe("IdentityDashboard — services", () => {
+  it("renders each service ID and endpoint", async () => {
+    mockResolveDid.mockResolvedValue(makeDocument({
+      services: [makeService(`${TEST_DID}#svc-1`)],
+    }));
+    render(<IdentityDashboard {...makeProps()} />);
+    await waitFor(() =>
+      expect(screen.getByText(`${TEST_DID}#svc-1`)).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/endpoint: https:\/\/example\.com/i)).toBeInTheDocument();
+  });
+
+  it("shows a trash button for each service", async () => {
+    mockResolveDid.mockResolvedValue(makeDocument({
+      services: [makeService(`${TEST_DID}#svc-1`)],
+    }));
+    render(<IdentityDashboard {...makeProps()} />);
+    await waitFor(() =>
+      expect(screen.getByTitle("Remove service")).toBeInTheDocument(),
+    );
+  });
+
+  it("shows the Add service endpoint button", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /add service endpoint/i })).toBeInTheDocument(),
+    );
+  });
+});
+
+// ── Add service endpoint inline form ─────────────────────────────────────────
+
+describe("IdentityDashboard — add service endpoint form", () => {
+  it("clicking Add service endpoint reveals the inline form", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /add service endpoint/i }));
+    expect(screen.getByText("Add Service Endpoint")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("#linked-domain")).toBeInTheDocument();
+  });
+
+  it("closing the add service form with ✕ hides it", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    fireEvent.click(await screen.findByRole("button", { name: /add service endpoint/i }));
+    fireEvent.click(screen.getByText("✕"));
+    await waitFor(() =>
+      expect(screen.queryByText("Add Service Endpoint")).not.toBeInTheDocument(),
+    );
+  });
+});
+
+// ── Danger Zone accordion ─────────────────────────────────────────────────────
+
+describe("IdentityDashboard — Danger Zone", () => {
+  it("shows the Danger Zone label after document loads", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    await waitFor(() =>
+      expect(screen.getByText(/danger zone/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("shows 'Deactivate Identity' row for an active DID", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    await waitFor(() =>
+      expect(screen.getByText("Deactivate Identity")).toBeInTheDocument(),
+    );
+  });
+
+  it("shows 'Reactivate Identity' row for a deactivated DID", async () => {
     mockResolveDid.mockResolvedValue(makeDocument({ deactivated: true }));
     render(<IdentityDashboard {...makeProps()} />);
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: /reactivate identity/i })).toBeInTheDocument(),
+      expect(screen.getByText("Reactivate Identity")).toBeInTheDocument(),
     );
   });
 
-  it("toggles the UpdateIdentity panel open and closed", async () => {
+  it("shows 'Delete Identity' row always", async () => {
     render(<IdentityDashboard {...makeProps()} />);
-    const updateBtn = await screen.findByRole("button", { name: /update identity/i });
-    fireEvent.click(updateBtn);
-    // UpdateIdentity mounts — it renders "Update Identity" as a heading.
     await waitFor(() =>
-      expect(screen.getByRole("heading", { name: /update identity/i })).toBeInTheDocument(),
+      expect(screen.getByText("Delete Identity")).toBeInTheDocument(),
     );
-    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+  });
+
+  it("clicking the Deactivate row opens its accordion panel", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    fireEvent.click((await screen.findByText("Deactivate Identity")).closest("button")!);
     await waitFor(() =>
-      expect(screen.queryByRole("heading", { name: /update identity/i })).not.toBeInTheDocument(),
+      expect(screen.getByText(/i understand this will deactivate the did/i)).toBeInTheDocument(),
     );
+  });
+
+  it("Deactivate DID button is disabled until the confirmation checkbox is checked", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    fireEvent.click((await screen.findByText("Deactivate Identity")).closest("button")!);
+    const deactivateBtn = await screen.findByRole("button", { name: /deactivate did/i });
+    expect(deactivateBtn).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(deactivateBtn).not.toBeDisabled();
+  });
+
+  it("clicking the Delete row opens its accordion panel", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    fireEvent.click((await screen.findByText("Delete Identity")).closest("button")!);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /permanently delete did/i })).toBeInTheDocument(),
+    );
+  });
+
+  it("Delete DID button is disabled until both confirmation checkboxes are checked", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    fireEvent.click((await screen.findByText("Delete Identity")).closest("button")!);
+    const deleteBtn = await screen.findByRole("button", { name: /permanently delete did/i });
+    expect(deleteBtn).toBeDisabled();
+    const checkboxes = await screen.findAllByRole("checkbox");
+    fireEvent.click(checkboxes[0]);
+    expect(deleteBtn).toBeDisabled();
+    fireEvent.click(checkboxes[1]);
+    expect(deleteBtn).not.toBeDisabled();
+  });
+
+  it("opening one panel closes the other and resets checkboxes", async () => {
+    render(<IdentityDashboard {...makeProps()} />);
+    // Open the deactivate panel and check its checkbox.
+    fireEvent.click((await screen.findByText("Deactivate Identity")).closest("button")!);
+    const checkbox = await screen.findByRole("checkbox");
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+    // Switch to the delete panel — deactivate content should disappear.
+    fireEvent.click(screen.getByText("Delete Identity").closest("button")!);
+    await waitFor(() =>
+      expect(screen.queryByText(/i understand this will deactivate/i)).not.toBeInTheDocument(),
+    );
+    // Delete checkboxes should start unchecked.
+    const deleteCheckboxes = await screen.findAllByRole("checkbox");
+    deleteCheckboxes.forEach((cb) => expect(cb).not.toBeChecked());
   });
 });
 

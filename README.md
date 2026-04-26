@@ -4,15 +4,15 @@ A browser dApp for creating and managing [IOTA Identity](https://docs.iota.org/d
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
-| **Passkey Vault** | Signing keys are encrypted with a WebAuthn PRF-derived key (Touch ID / Windows Hello / PIN). Keys survive page reloads without ever leaving the device unencrypted. |
-| **Create Identity** | Publishes a new `did:iota` DID document on the ledger. Your wallet pays gas and becomes the sole controller. |
-| **View Identity** | Displays verification methods, services, and metadata for your DID. |
-| **Update Identity** | Add service endpoints or deactivate the DID — wallet signs the update transaction. |
-| **Resolve DID** | Look up any `did:iota` identifier on the current network. |
-| **Network switcher** | Toggle between testnet, devnet, and localnet from the header. |
-| **Vault Backup** | Export an encrypted backup file; restore keys and DIDs on a new device. |
+| Feature              | Description                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Passkey Vault**    | Signing keys are encrypted with a WebAuthn PRF-derived key (Touch ID / Windows Hello / PIN). Keys survive page reloads without ever leaving the device unencrypted. |
+| **Create Identity**  | Publishes a new `did:iota` DID document on the ledger. Your wallet pays gas and becomes the sole controller.                                                        |
+| **Manage Identity**  | Inline add / remove verification keys and service endpoints directly from the identity card. Each change is signed and published on-chain.                          |
+| **Danger Zone**      | Deactivate, reactivate, or permanently delete an identity — gated by confirmation checkboxes inside a collapsible accordion.                                        |
+| **Resolve DID**      | Look up any `did:iota` identifier on the current network.                                                                                                           |
+| **Network switcher** | Dropdown to toggle between testnet, devnet, and localnet from the header.                                                                                           |
+| **Vault Backup**     | Export an encrypted backup file; restore keys and DIDs on a new device.                                                                                             |
 
 ## Architecture
 
@@ -77,20 +77,20 @@ Click **Fund wallet** in the dev banner to get test tokens from the localnet fau
 
 ## Dependencies
 
-| Package | Role |
-|---------|------|
-| `@iota/identity-wasm` | WASM build of IOTA Identity — DID/VC operations |
-| `@iota/dapp-kit` | React hooks and components for wallet connection |
-| `@iota/iota-sdk` | IOTA TypeScript SDK — client, transactions, crypto |
-| `@noble/ed25519` | Ed25519 key generation and signing |
-| `@tanstack/react-query` | Async state management (required by dApp Kit) |
+| Package                 | Role                                               |
+| ----------------------- | -------------------------------------------------- |
+| `@iota/identity-wasm`   | WASM build of IOTA Identity — DID/VC operations    |
+| `@iota/dapp-kit`        | React hooks and components for wallet connection   |
+| `@iota/iota-sdk`        | IOTA TypeScript SDK — client, transactions, crypto |
+| `@noble/ed25519`        | Ed25519 key generation and signing                 |
+| `@tanstack/react-query` | Async state management (required by dApp Kit)      |
 
 ## Browser compatibility
 
-| Feature | Chrome/Edge 116+ | Safari 17.4+ | Firefox |
-|---------|-----------------|--------------|---------|
-| WebAuthn PRF (passkey vault) | ✓ | ✓ | ✗ — falls back to session-only `JwkMemStore` |
-| General dApp functionality | ✓ | ✓ | ✓ |
+| Feature                      | Chrome/Edge 116+ | Safari 17.4+ | Firefox                                      |
+| ---------------------------- | ---------------- | ------------ | -------------------------------------------- |
+| WebAuthn PRF (passkey vault) | ✓                | ✓            | ✗ — falls back to session-only `JwkMemStore` |
+| General dApp functionality   | ✓                | ✓            | ✓                                            |
 
 ## Testing
 

@@ -419,3 +419,76 @@ describe("UpdateIdentity — error handling", () => {
     );
   });
 });
+
+// ── Edge cases ────────────────────────────────────────────────────────────────
+
+describe("UpdateIdentity — edge cases", () => {
+  function makeClientMock(createIdentityClient: ReturnType<typeof vi.fn>) {
+    return {
+      readOnlyClient:       {} as never,
+      createIdentityClient,
+      storage:              {} as never,
+      initialising:         false,
+      initError:            null,
+      isReady:              true,
+      isWalletConnected:    true,
+    };
+  }
+
+  it("purgeMethod is called (not removeMethod) when removing a key", async () => {
+    const { client, freshDoc } = makeIdentityClient();
+    vi.mocked(useIdentityClient).mockReturnValue(
+      makeClientMock(vi.fn().mockResolvedValue(client)),
+    );
+    const doc = makeDocument({
+      methods: [
+        makeMethod("did:iota:testnet:0xabc#key-1"),
+        makeMethod("did:iota:testnet:0xabc#key-2"),
+      ],
+    });
+    render(<UpdateIdentity {...makeProps({ document: doc })} />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove Key" }));
+    const buttons = screen.getAllByRole("button", { name: /remove key/i });
+    fireEvent.click(buttons[buttons.length - 1]);
+    await waitFor(() => expect(freshDoc.purgeMethod).toHaveBeenCalledTimes(1));
+  });
+
+  it("reactivation calls setMetadataDeactivated(false), not deactivateDid", async () => {
+    const { client, freshDoc, onChainIdentity } = makeIdentityClient();
+    vi.mocked(useIdentityClient).mockReturnValue(
+      makeClientMock(vi.fn().mockResolvedValue(client)),
+    );
+    render(<UpdateIdentity {...makeProps({ document: makeDocument({ deactivated: true }) })} />);
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /reactivate did/i }));
+    await waitFor(() =>
+      expect(freshDoc.setMetadataDeactivated).toHaveBeenCalledWith(false),
+    );
+    expect(onChainIdentity.updateDidDocument).toHaveBeenCalledTimes(1);
+    expect(onChainIdentity.deactivateDid).not.toHaveBeenCalled();
+  });
+
+  it("switching tabs resets the deactivation confirmation checkbox", () => {
+    render(<UpdateIdentity {...makeProps()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Deactivate" }));
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.getByRole("button", { name: /deactivate did/i })).not.toBeDisabled();
+
+    // Switch away and back — checkbox state should reset.
+    fireEvent.click(screen.getByRole("button", { name: "Add Key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deactivate" }));
+    expect(screen.getByRole("button", { name: /deactivate did/i })).toBeDisabled();
+  });
+
+  it("switching tabs resets both Delete confirmation checkboxes", () => {
+    render(<UpdateIdentity {...makeProps()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    screen.getAllByRole("checkbox").forEach((cb) => fireEvent.click(cb));
+    expect(screen.getByRole("button", { name: /permanently delete/i })).not.toBeDisabled();
+
+    // Switch away and back.
+    fireEvent.click(screen.getByRole("button", { name: "Add Key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.getByRole("button", { name: /permanently delete/i })).toBeDisabled();
+  });
+});
