@@ -156,7 +156,18 @@ export function IdentityDashboard({ did, storage, onClear }: Props) {
 
       } else if (mode === "remove-key") {
         const doc = await identityClient.resolveDid(iotaDid);
-        await doc.purgeMethod(storage, DIDUrl.parse(params.methodId));
+        try {
+          await doc.purgeMethod(storage, DIDUrl.parse(params.methodId));
+        } catch (e) {
+          // purgeMethod failed to find the key in vault storage (e.g. the key
+          // was created before the digest-migration fix). Fall back to removing
+          // the method from the document only; the orphaned vault entry is benign.
+          if (e instanceof Error && e.message.toLowerCase().includes("key id")) {
+            doc.removeMethod(DIDUrl.parse(params.methodId));
+          } else {
+            throw e;
+          }
+        }
         await onChainIdentity.updateDidDocument(doc, controllerToken).buildAndExecute(identityClient);
 
       } else if (mode === "add-service") {

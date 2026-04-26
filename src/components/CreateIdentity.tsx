@@ -3,10 +3,12 @@ import {
   IotaDocument,
   IotaDID,
   JwkMemStore,
+  MethodDigest,
   MethodScope,
   Storage,
 } from "@iota/identity-wasm/web";
 import type { JwsAlgorithm } from "@iota/identity-wasm/web";
+import { retryAsync } from "../lib/retryAsync";
 import { useIotaClient, useIotaClientContext } from "@iota/dapp-kit";
 import { useIdentityClient } from "../hooks/useIdentityClient";
 
@@ -58,6 +60,12 @@ export function CreateIdentity({ onCreated, storage }: Props) {
         MethodScope.VerificationMethod(),
       );
 
+      // Capture the provisional method now, before createIdentity() may take
+      // ownership of the document. The provisional DID is always the zero address,
+      // so the stored MethodDigest → keyId entry uses the wrong DID URL. We fix
+      // it after publication once we know the real on-chain DID.
+      const provisionalMethod = unpublished.methods()[0];
+
       setStep("publishing");
 
       const [txDataBcs, signatures] = await (
@@ -89,6 +97,28 @@ export function CreateIdentity({ onCreated, storage }: Props) {
       }
 
       const did = IotaDID.fromObjectId(identityChange.objectId, network).toString();
+
+      // Remap the PasskeyKeyIdStorage entry from the provisional DID's method
+      // digest to the real on-chain DID's method digest. Without this, purgeMethod
+      // would fail to find the key when the user later tries to remove #key-1.
+      try {
+        const resolvedDoc = await retryAsync(
+          () => identityClient.resolveDid(IotaDID.parse(did)),
+          { attempts: 5, delayMs: 1000, shouldRetry: () => true },
+        );
+        const realMethod = resolvedDoc.methods()[0];
+        if (realMethod && provisionalMethod) {
+          const provisionalDigest = new MethodDigest(provisionalMethod);
+          const realDigest = new MethodDigest(realMethod);
+          const keyId = await storage.keyIdStorage().getKeyId(provisionalDigest);
+          await storage.keyIdStorage().insertKeyId(realDigest, keyId);
+          await storage.keyIdStorage().deleteKeyId(provisionalDigest);
+        }
+      } catch {
+        // Migration failed — creation still succeeded. Deleting #key-1 later
+        // will fall back to removeMethod (no vault cleanup) rather than erroring.
+      }
+
       onCreated(did);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
