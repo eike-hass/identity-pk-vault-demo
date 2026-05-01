@@ -30,13 +30,14 @@ export default function App() {
   const { initialising, initError, storage } = useIdentityClient(vault.storage);
 
   const [dids, setDids] = useState<string[]>([]);
-  const [selectedDid, setSelectedDid] = useState<string | null>(null);
+  const [activeDid, setActiveDid] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("identity");
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
     if (!account) {
       setDids([]);
+      setActiveDid(null);
       setShowCreate(false);
       return;
     }
@@ -44,17 +45,26 @@ export default function App() {
       .then((db) => listDids(db, account.address, network))
       .then((fetched) => {
         setDids(fetched);
-        setSelectedDid(fetched.length > 0 ? fetched[0] : null);
+        setActiveDid(fetched.length > 0 ? fetched[0] : null);
       });
     setShowCreate(false);
   }, [account, network]);
+
+  // Auto-select first DID when list changes and nothing active
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (dids.length > 0 && (!activeDid || !dids.includes(activeDid))) {
+      setActiveDid(dids[0]);
+      setShowCreate(false);
+    }
+  }, [dids]);
 
   async function handleCreated(newDid: string) {
     if (!account) return;
     const db = await openVaultDb();
     await putDid(db, account.address, network, newDid);
     setDids((prev) => [...prev, newDid]);
-    setSelectedDid(newDid);
+    setActiveDid(newDid);
     setShowCreate(false);
   }
 
@@ -69,7 +79,7 @@ export default function App() {
     await deleteDid(db, did);
     setDids((prev) => {
       const next = prev.filter((d) => d !== did);
-      setSelectedDid(next.length > 0 ? next[0] : null);
+      if (activeDid === did) setActiveDid(next[0] ?? null);
       return next;
     });
   }
@@ -129,64 +139,74 @@ export default function App() {
             {/* Tab panels */}
             {tab === "identity" && (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {/* Multi-DID selector — only shown when 2+ DIDs exist */}
-                {dids.length > 1 && (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {/* DID pill switcher — shown when 1+ DIDs exist */}
+                {dids.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                     {dids.map((did) => {
-                      const parts = did.split(":");
-                      const tag = parts[parts.length - 1] ?? did;
-                      const abbrev = tag.length > 16
-                        ? `${tag.slice(0, 8)}…${tag.slice(-6)}`
-                        : tag;
-                      const active = did === selectedDid;
+                      const short = did.split(":").pop()!.slice(0, 8) + "…";
+                      const active = activeDid === did;
                       return (
                         <button
                           key={did}
-                          onClick={() => { setSelectedDid(did); setShowCreate(false); }}
+                          onClick={() => { setActiveDid(did); setShowCreate(false); }}
                           title={did}
                           style={{
                             padding: "5px 12px",
-                            fontSize: 11,
+                            borderRadius: 100,
+                            fontSize: 12,
+                            fontWeight: 500,
                             fontFamily: "var(--font-mono)",
-                            borderRadius: 8,
-                            border: active
-                              ? "1px solid rgba(14,165,233,0.5)"
-                              : "1px solid rgba(255,255,255,0.08)",
-                            background: active
-                              ? "rgba(14,165,233,0.12)"
-                              : "rgba(255,255,255,0.04)",
-                            color: active ? "#38bdf8" : "var(--text-2)",
                             cursor: "pointer",
+                            border: "none",
+                            background: active ? "var(--accent-muted)" : "rgba(255,255,255,0.06)",
+                            color: active ? "#fff" : "var(--text-2)",
+                            boxShadow: active ? "0 1px 6px rgba(0,0,0,0.3)" : "none",
                             transition: "all 0.15s",
                           }}
                         >
-                          {abbrev}
+                          {short}
                         </button>
                       );
                     })}
+                    {/* New identity pill */}
+                    <button
+                      onClick={() => { setShowCreate(true); setActiveDid(null); }}
+                      style={{
+                        padding: "5px 12px",
+                        borderRadius: 100,
+                        fontSize: 12,
+                        fontWeight: 500,
+                        cursor: "pointer",
+                        border: "1px dashed rgba(255,255,255,0.15)",
+                        background: showCreate ? "rgba(14,165,233,0.12)" : "transparent",
+                        color: showCreate ? "#38bdf8" : "var(--text-3)",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <svg width={11} height={11} viewBox="0 0 11 11" fill="none">
+                        <path d="M5.5 1.5V9.5M1.5 5.5H9.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                      </svg>
+                      New
+                    </button>
                   </div>
                 )}
 
-                {/* Active dashboard */}
-                {selectedDid && !showCreate && (
+                {/* Active DID dashboard */}
+                {activeDid && !showCreate && (
                   <IdentityDashboard
-                    key={selectedDid}
-                    did={selectedDid}
+                    key={activeDid}
+                    did={activeDid}
                     storage={storage}
-                    onClear={() => handleForget(selectedDid)}
+                    onClear={() => handleForget(activeDid)}
                   />
                 )}
 
-                {dids.length === 0 || showCreate ? (
+                {/* Create form — first run or when New is clicked */}
+                {(dids.length === 0 || showCreate) && (
                   <CreateIdentity onCreated={handleCreated} storage={storage} />
-                ) : (
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setShowCreate(true)}
-                    style={{ width: "100%", padding: "11px 20px" }}
-                  >
-                    + Create another identity
-                  </button>
                 )}
               </div>
             )}

@@ -73,10 +73,11 @@ function makeDocument({
     toJSON:                () => ({ id: TEST_DID }),
     generateMethod:        vi.fn().mockResolvedValue(undefined),
     purgeMethod:           vi.fn().mockResolvedValue(undefined),
+    removeMethod:          vi.fn(),
     insertService:         vi.fn(),
     removeService:         vi.fn(),
     setMetadataDeactivated: vi.fn(),
-  } as never;
+  } as any;
 }
 
 function makeProps(overrides: Partial<Parameters<typeof IdentityDashboard>[0]> = {}) {
@@ -211,6 +212,60 @@ describe("IdentityDashboard — verification methods", () => {
     await waitFor(() =>
       expect(screen.getAllByTitle("Remove key")).toHaveLength(2),
     );
+  });
+
+  it("clicking a trash button calls purgeMethod and publishes the update", async () => {
+    const twoMethodDoc = makeDocument({
+      methods: [makeMethod(`${TEST_DID}#key-1`), makeMethod(`${TEST_DID}#key-2`)],
+    });
+    mockResolveDid.mockResolvedValue(twoMethodDoc);
+    vi.mocked(useIdentityClient).mockReturnValue({
+      readOnlyClient:       { resolveDid: mockResolveDid } as never,
+      createIdentityClient: vi.fn().mockResolvedValue({
+        getIdentity: vi.fn().mockResolvedValue({ toFullFledged: () => makeOnChainIdentity() }),
+        resolveDid:  vi.fn().mockResolvedValue(twoMethodDoc),
+      }),
+      storage:              {} as never,
+      initialising:         false,
+      initError:            null,
+      isReady:              true,
+      isWalletConnected:    true,
+    });
+
+    render(<IdentityDashboard {...makeProps()} />);
+    const [firstTrash] = await screen.findAllByTitle("Remove key");
+    fireEvent.click(firstTrash);
+    await waitFor(() => expect(twoMethodDoc.purgeMethod).toHaveBeenCalledTimes(1));
+  });
+
+  it("falls back to removeMethod when purgeMethod throws a key-id storage error", async () => {
+    const twoMethodDoc = makeDocument({
+      methods: [makeMethod(`${TEST_DID}#key-1`), makeMethod(`${TEST_DID}#key-2`)],
+    });
+    twoMethodDoc.purgeMethod = vi.fn().mockRejectedValue(
+      new Error("key id storage error: key id storage operation failed"),
+    );
+    twoMethodDoc.removeMethod = vi.fn();
+
+    mockResolveDid.mockResolvedValue(twoMethodDoc);
+    vi.mocked(useIdentityClient).mockReturnValue({
+      readOnlyClient:       { resolveDid: mockResolveDid } as never,
+      createIdentityClient: vi.fn().mockResolvedValue({
+        getIdentity: vi.fn().mockResolvedValue({ toFullFledged: () => makeOnChainIdentity() }),
+        resolveDid:  vi.fn().mockResolvedValue(twoMethodDoc),
+      }),
+      storage:              {} as never,
+      initialising:         false,
+      initError:            null,
+      isReady:              true,
+      isWalletConnected:    true,
+    });
+
+    render(<IdentityDashboard {...makeProps()} />);
+    const [firstTrash] = await screen.findAllByTitle("Remove key");
+    fireEvent.click(firstTrash);
+    await waitFor(() => expect(twoMethodDoc.removeMethod).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/key id storage/i)).not.toBeInTheDocument();
   });
 });
 
